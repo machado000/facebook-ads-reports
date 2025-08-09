@@ -1,9 +1,9 @@
 """
-Google Ads report models module.
+Facebook Marketing API report models module.
 
-This module contains pre-configured report models for different types of Google Ads reports.
+This module contains pre-configured report models for different types of Facebook Marketing API reports.
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 class MetaAdsReportModel:
@@ -105,12 +105,12 @@ class MetaAdsReportModel:
     }
 
     @classmethod
-    def get_all_reports(cls) -> Dict[str, Dict[str, Any]]:
+    def get_all_reports(cls) -> dict[str, dict[str, Any]]:
         """
         Get all available report models.
 
         Returns:
-            Dict[str, Dict[str, Any]]: Dictionary of all report models
+            dict[str, dict[str, Any]]: Dictionary of all report models
         """
         return {
             'ad_dimensions_report': cls.ad_dimensions_report,
@@ -118,7 +118,7 @@ class MetaAdsReportModel:
         }
 
     @classmethod
-    def get_report_by_name(cls, report_name: str) -> Optional[Dict[str, Any]]:
+    def get_report_by_name(cls, report_name: str) -> Optional[dict[str, Any]]:
         """
         Get a specific report model by name.
 
@@ -126,33 +126,39 @@ class MetaAdsReportModel:
             report_name (str): The name of the report model
 
         Returns:
-            Optional[Dict[str, Any]]: The report model if found, None otherwise
+            Optional[dict[str, Any]]: The report model if found, None otherwise
         """
         all_reports = cls.get_all_reports()
         return all_reports.get(report_name)
 
     @classmethod
-    def list_available_reports(cls) -> List[str]:
+    def list_available_reports(cls) -> list[str]:
         """
         List all available report names.
 
         Returns:
-            List[str]: List of available report names
+            list[str]: List of available report names
         """
         return list(cls.get_all_reports().keys())
 
 
 # Factory function for creating custom report models
-def create_custom_report(report_name: str, select: List[str], from_table: str,
-                         order_by: Optional[str] = None, where: Optional[str] = None,
-                         table_name: Optional[str] = None,
-                         date_column: str = "date") -> Dict[str, Any]:
+
+def create_custom_report(
+    report_name: str,
+    select: list[str],
+    from_table: str,
+    order_by: Optional[str] = None,
+    where: Optional[str] = None,
+    table_name: Optional[str] = None,
+    date_column: str = "date"
+) -> dict[str, Any]:
     """
-    Create a custom report model.
+    Create a custom Facebook Ads report model configuration.
 
     Args:
         report_name (str): Name of the custom report
-        select (List[str]): List of fields to select
+        select (list[str]): List of fields to select
         from_table (str): Table to query from
         order_by (Optional[str]): Field to order by (besides date)
         where (Optional[str]): Additional WHERE clause conditions
@@ -160,7 +166,7 @@ def create_custom_report(report_name: str, select: List[str], from_table: str,
         date_column (str): Date column name
 
     Returns:
-        Dict[str, Any]: Custom report model configuration
+        dict[str, Any]: Custom report model configuration
     """
     report_model = {
         "report_name": report_name,

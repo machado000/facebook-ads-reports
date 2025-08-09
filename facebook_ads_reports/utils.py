@@ -16,11 +16,10 @@ def load_credentials(config_path: Optional[str] = None) -> Dict[str, Any]:
     Load Facebook Marketing API credentials from JSON file.
 
     Args:
-        config_path (Optional[str]): Path to the credentials file.
-                                   If None, tries default locations.
+        config_path (Optional[str]): Path to the credentials file. If None, tries default locations.
 
     Returns:
-        Dict[str, Any]: Loaded credentials configuration
+        dict[str, Any]: Loaded credentials configuration
 
     Raises:
         FileNotFoundError: If credentials file is not found

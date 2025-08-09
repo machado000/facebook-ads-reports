@@ -1,8 +1,8 @@
 """
-Google Ads Driver - A Python ETL module for Google Ads API data extraction.
+Facebook Ads Reports Driver - A Python ETL module for Facebook Marketing API data extraction.
 
-This package provides tools for extracting, transforming, and loading Google Ads data
-using the Google Ads API with pandas DataFrame outputs.
+This package provides tools for extracting, transforming, and loading Facebook Ads data
+using the Facebook Marketing API with pandas DataFrame outputs.
 """
 from .client import MetaAdsReport
 from .exceptions import (

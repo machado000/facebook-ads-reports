@@ -1,5 +1,5 @@
 """
-Retry decorator for handling transient errors.
+Retry decorator for handling transient Facebook Marketing API errors.
 """
 import logging
 import random
@@ -19,7 +19,7 @@ def retry_on_api_error(
     jitter: bool = True
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
-    Decorator to retry function calls on transient API errors.
+    Decorator to retry function calls on transient Facebook Marketing API errors.
 
     Args:
         max_attempts: Maximum number of retry attempts
@@ -71,7 +71,7 @@ def retry_on_api_error(
                     time.sleep(delay)
 
                 except Exception as e:
-                    # Non-Google Ads exceptions are not retried
+                    # Non-Facebook Marketing API exceptions are not retried
                     logging.error(f"Unexpected error in {func.__name__}: {e}")
                     raise
 
@@ -92,36 +92,32 @@ def _is_retryable_error(error: RequestException) -> bool:
     Determine if a RequestException is retryable.
 
     Args:
-        error: The RequestException to check
+        error (RequestException): The RequestException to check
 
     Returns:
         bool: True if the error should be retried
     """
-    # Conservative approach - only retry on obvious transient errors
-    retryable_error_codes = {
-        'INTERNAL_ERROR',
-        'QUOTA_ERROR',
-        'RATE_EXCEEDED',
-        'CONCURRENT_MODIFICATION',
-        'PARTIAL_FAILURE_ERROR'
-    }
+    # Retry on common transient HTTP status codes
+    if hasattr(error, 'response') and error.response is not None:
+        if error.response.status_code in {500, 502, 503, 504, 429}:
+            return True
 
+    # Retry on common transient error messages
     retryable_messages = [
         'internal error',
         'rate exceeded',
         'quota exceeded',
         'timeout',
         'temporary failure',
-        'service unavailable'
+        'service unavailable',
+        'connection aborted',
+        'connection reset',
+        'connection refused',
+        'connection error',
+        'temporarily unavailable',
+        'too many requests',
     ]
 
-    # Check error code
-    if hasattr(error, 'error') and hasattr(error.error, 'error_code'):
-        error_code = str(error.error.error_code)
-        if any(code in error_code.upper() for code in retryable_error_codes):
-            return True
-
-    # Check error message
     error_message = str(error).lower()
     if any(msg in error_message for msg in retryable_messages):
         return True

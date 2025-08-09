@@ -28,16 +28,16 @@ class MetaAdsReport:
     MetaAdsReport class for interacting with the Facebook Marketing API v22.
     """
 
-    def __init__(self, credentials_json: Dict[str, str]):
+    def __init__(self, credentials_json: Dict[str, str]) -> None:
         """
         Initializes the MetaAdsReport instance.
 
-        Parameters:
-        - credentials_json (dict): The JSON credentials for authentication.
+        Args:
+            credentials_json (dict): The JSON credentials for authentication.
 
         Raises:
-        - AuthenticationError: If credentials are invalid or authentication fails
-        - ValidationError: If credentials_json format is invalid
+            AuthenticationError: If credentials are invalid or authentication fails.
+            ValidationError: If credentials_json format is invalid.
         """
         if not isinstance(credentials_json, dict):
             raise ValidationError("credentials_json must be a dictionary")

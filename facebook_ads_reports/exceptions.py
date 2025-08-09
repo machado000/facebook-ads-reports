@@ -1,10 +1,10 @@
 """
-Custom exceptions for the Google Ads driver module.
+Custom exceptions for the Facebook Ads driver module.
 """
 
 
 class MetaAdsReportError(Exception):
-    """Base exception for all Google Ads report errors."""
+    """Base exception for all Facebook Marketing API errors."""
 
     def __init__(self, message: str, original_error=None, **context):
         self.message = message
@@ -18,7 +18,7 @@ class MetaAdsReportError(Exception):
 
 
 class AuthenticationError(MetaAdsReportError):
-    """Raised when authentication with Google Ads API fails."""
+    """Raised when authentication with Facebook Marketing API fails."""
     pass
 
 
@@ -28,7 +28,7 @@ class ValidationError(MetaAdsReportError):
 
 
 class APIError(MetaAdsReportError):
-    """Raised when Google Ads API returns an error."""
+    """Raised when Facebook Marketing API returns an error."""
     pass
 
 
