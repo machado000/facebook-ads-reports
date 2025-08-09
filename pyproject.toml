@@ -1,0 +1,60 @@
+[project]
+name = "facebook-ads-reports"
+version = "0.0.1"
+description = "ETL module for Facebook Ads API v22 with database-optimized DataFrame processing"
+authors = [{ name = "Joao Brito"}]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10,<3.13"
+keywords = ["google-ads", "pandas", "etl", "data-extraction", "reports"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10", 
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Typing :: Typed"
+]
+dependencies = [
+    "logging (>=0.4.9.6,<0.5.0.0)",
+    "pandas>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "requests (>=2.32.4,<3.0.0)",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "mypy>=1.0.0",
+    "pandas-stubs>=2.0.0.230412",
+]
+
+[project.urls]
+Homepage = "https://github.com/machado000/facebook-ads-reports"
+Documentation = "https://github.com/machado000/facebook-ads-reports#readme"
+Issues = "https://github.com/machado000/facebook-ads-reports/issues"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [{ include = "facebook_ads_reports" }]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_return_any = true
+show_error_codes = true
+per_module_options = {"tests.*" = {disallow_untyped_defs = false}}
