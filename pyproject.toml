@@ -1,14 +1,14 @@
 [project]
 name = "facebook-ads-reports"
-version = "0.2.0"
+version = "0.9.0"
 description = "ETL module for Facebook Ads API v22 with database-optimized DataFrame processing"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
 license = { text = "GPL" }
 requires-python = ">=3.10,<3.13"
-keywords = ["google-ads", "pandas", "etl", "data-extraction", "reports"]
+keywords = ["facebook-ads", "pandas", "etl", "data-extraction", "reports"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
@@ -39,7 +39,6 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/machado000/facebook-ads-reports"
-Documentation = "https://github.com/machado000/facebook-ads-reports#readme"
 Issues = "https://github.com/machado000/facebook-ads-reports/issues"
 
 [build-system]
