@@ -43,7 +43,7 @@ class MetaAdsReportModel:
             # "sort": ["ad_id"]
         },
         "action_types": [],
-        "table_name": "olap__meta_ad_dimensions",
+        "table_name": "meta_ads_dimensions",
         "constraint_column": ["ad_id"],
     }
 
@@ -100,7 +100,7 @@ class MetaAdsReportModel:
             "purchase",
             "view_content",
         ],
-        "table_name": "olap__meta_ad_performance",
+        "table_name": "meta_ads_metrics",
         "date_column": "date_start",
     }
 
