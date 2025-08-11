@@ -1,6 +1,6 @@
 [project]
 name = "facebook-ads-reports"
-version = "0.9.0"
+version = "0.9.1"
 description = "ETL module for Facebook Ads API v22 with database-optimized DataFrame processing"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
