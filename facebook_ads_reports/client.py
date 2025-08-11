@@ -86,7 +86,7 @@ class MetaAdsReport:
             params["time_range"] = {"since": start_date_format, "until": end_date_format}
 
         # Display request parameters
-        print(f"INFO  - Trying to get Ad_Insights report with `{self.api_base_url}`",
+        print(f"INFO - Trying to get Ad_Insights report with `{self.api_base_url}`\n",
               "[ Request parameters ]",
               f"Ad_Account_id: {ad_account_id}",
               f"Report_model: {report_name}",
