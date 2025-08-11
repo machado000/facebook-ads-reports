@@ -388,7 +388,7 @@ class MetaAdsReport:
             metrics_to_convert = []
 
             # Find all columns that do not match exclude_terms and are currently 'object' type
-            exclude_terms = ['id', 'name', 'type', 'platform', 'date']
+            exclude_terms = ['id', 'name', 'type', 'platform', 'date', 'setting', 'objective', 'optimization']
             for col in df.columns:
                 if df[col].dtype == 'object' and not any(
                     col == term or
