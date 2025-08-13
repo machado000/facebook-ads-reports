@@ -28,31 +28,30 @@ class MetaAdsReport:
     MetaAdsReport class for interacting with the Facebook Marketing API v22.
     """
 
-    def __init__(self, credentials_json: Dict[str, str]) -> None:
+    def __init__(self, credentials_dict: Dict[str, str]) -> None:
         """
         Initializes the MetaAdsReport instance.
 
         Args:
-            credentials_json (dict): The JSON credentials for authentication.
+            credentials_dict (dict): The JSON credentials for authentication.
 
         Raises:
             AuthenticationError: If credentials are invalid or authentication fails.
-            ValidationError: If credentials_json format is invalid.
+            ValidationError: If credentials_dict format is invalid.
         """
-        if not isinstance(credentials_json, dict):
-            raise ValidationError("credentials_json must be a dictionary")
+        if not isinstance(credentials_dict, dict):
+            raise ValidationError("credentials_dict must be a dictionary")
 
-        if not credentials_json:
-            raise ValidationError("credentials_json cannot be empty")
+        if not credentials_dict:
+            raise ValidationError("credentials_dict cannot be empty")
 
         try:
-            self.app_id = credentials_json["app_id"]
-            self.access_token = credentials_json["access_token"]
-            self.ad_account_id = credentials_json["ad_account_id"]
-            self.api_base_url = credentials_json["base_url"]
+            self.app_id = credentials_dict["app_id"]
+            self.access_token = credentials_dict["access_token"]
+            self.api_base_url = credentials_dict.get("base_url", "https://graph.facebook.com/v23.0")
 
         except Exception as e:
-            raise KeyError("credentials_json must contain 'app_id' and 'access_token' keys") from e
+            raise KeyError("credentials_dict must contain 'app_id' and 'access_token' keys") from e
 
     @retry_on_api_error()
     def get_insights_report(self, ad_account_id: str, report_model: dict,
