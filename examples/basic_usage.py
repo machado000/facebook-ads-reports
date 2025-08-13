@@ -4,6 +4,7 @@ Basic Facebook Ads Report Example
 This example demonstrates the basic usage of the google-ads-drv package
 to extract data from Facebook Ads API and export it to CSV.
 """
+import json
 import logging
 import os
 from datetime import date, timedelta
@@ -18,17 +19,23 @@ def main():
     setup_logging(level=logging.INFO)
 
     # Load credentials from the default location
-    try:
-        # Will look in secrets/fb_business_config.json by default
-        credentials = load_credentials("./secrets/fub-sp_config.json")
-    except Exception as e:
-        logging.error("Could not find Facebook Ads credentials file. Please ensure you have "
-                      "a fb_business_config.json file in the secrets/ directory or specify the path.")
-        logging.error(f"Error: {e}")
-        return
+    load_dotenv()
+    json_content = os.environ.get('FACEBOOK_ADS_CONFIG_JSON')
+
+    if json_content:
+        json_content = json_content.replace('\\n', '\n')  # Convert literal \\n to real newlines
+        credentials = json.loads(json_content)
+    else:
+        try:
+            credentials = load_credentials("./secrets/fb_business_config.json")
+        except Exception as e:
+            logging.error("Could not find credentials. Please ensure you have FACEBOOK_ADS_CONFIG_JSON variable set "
+                          "or a 'fb_business_config.json' file in the secrets/ directory.")
+            logging.error(f"Error: {e}")
+            raise
 
     # Initialize the Facebook Ads client
-    meta_api_client = MetaAdsReport(credentials_json=credentials)
+    meta_api_client = MetaAdsReport(credentials_dict=credentials)
     report_model = MetaAdsReportModel.ad_performance_report
 
     # Report parameters
