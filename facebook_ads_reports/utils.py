@@ -1,13 +1,14 @@
 """
 Utility functions for the MetaAdsReport driver module.
 """
+import calendar
+import json
 import logging
 import os
+
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
-
-import json
-
 from .exceptions import ConfigurationError, ValidationError
 
 
@@ -64,27 +65,6 @@ def load_credentials(config_path: Optional[str] = None) -> Dict[str, Any]:
 
     raise ConfigurationError(
         f"Could not find credentials file in any of these locations: {paths_to_try}"
-    )
-
-
-def setup_logging(level: int = logging.INFO,
-                  format_string: Optional[str] = None) -> None:
-    """
-    Setup logging configuration.
-
-    Args:
-        level (int): Logging level (default: INFO)
-        format_string (Optional[str]): Custom format string
-    """
-    if format_string is None:
-        format_string = '%(levelname)s - %(message)s'
-
-    logging.basicConfig(
-        level=level,
-        format=format_string,
-        handlers=[
-            logging.StreamHandler(),
-        ]
     )
 
 
@@ -160,3 +140,47 @@ def format_report_filename(report_name: str, account_id: str,
     safe_account_id = validate_account_id(account_id)
 
     return f"{safe_report_name}_{safe_account_id}_{start_date}_{end_date}.{file_extension}"
+
+
+def get_month_date_pairs(start_date: date, end_date: date) -> list[tuple[date, date]]:
+    """
+    Breaks a date range into monthly (start_date, end_date) pairs.
+
+    Args:
+        start_date (date): The start date of the range.
+        end_date (date): The end date of the range.
+
+    Returns:
+        list[tuple[date, date]]: List of (start_date, end_date) tuples for each month in the range.
+    """
+    # Ensure input dates are date objects
+    if isinstance(start_date, datetime):
+        start_date = start_date.date()
+    if isinstance(end_date, datetime):
+        end_date = end_date.date()
+
+    if end_date < start_date:
+        raise ValueError("ERROR - Invalid dates: 'end_date' precedes 'start_date'")
+
+    # Initialize the list to store the month periods
+    month_periods = []
+
+    # Iterate through each month
+    current_date = start_date
+    while current_date <= end_date:
+        # Get the first day of the current month
+        month_start = max(current_date, date(current_date.year, current_date.month, 1))
+
+        # Get the last day of the current month using calendar.monthrange
+        last_day = calendar.monthrange(current_date.year, current_date.month)[1]
+        month_end = min(end_date, date(current_date.year, current_date.month, last_day))
+
+        month_periods.append((month_start, month_end))
+
+        # Move to the first day of the next month
+        if current_date.month == 12:
+            current_date = date(current_date.year + 1, 1, 1)
+        else:
+            current_date = date(current_date.year, current_date.month + 1, 1)
+
+    return month_periods
