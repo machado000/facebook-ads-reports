@@ -1,6 +1,6 @@
 [project]
 name = "facebook-ads-reports"
-version = "1.0.0"
+version = "1.0.1"
 description = "ETL module for Facebook Ads API v22 with database-optimized DataFrame processing"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
@@ -22,7 +22,6 @@ classifiers = [
     "Typing :: Typed"
 ]
 dependencies = [
-    "logging (>=0.4.9.6,<0.5.0.0)",
     "pandas (>=2.3.2,<3.0.0)",
     "python-dotenv (>=1.1.1,<2.0.0)",
     "requests (>=2.32.4,<3.0.0)",
