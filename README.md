@@ -1,6 +1,6 @@
 # Facebook Ads Reports Helper
 
-A Python ETL driver for Facebook Marketing API v22 data extraction and transformation. Simplifies the process of extracting Facebook Ads data and converting it to database-ready pandas DataFrames with comprehensive optimization features.
+A Python ETL driver for Facebook Marketing API v23 data extraction and transformation. Simplifies the process of extracting Facebook Ads data and converting it to database-ready pandas DataFrames with comprehensive optimization features.
 
 [![PyPI version](https://img.shields.io/pypi/v/facebook-ads-reports)](https://pypi.org/project/facebook-ads-reports/)
 [![Last Commit](https://img.shields.io/github/last-commit/machado000/facebook-ads-reports)](https://github.com/machado000/facebook-ads-reports/commits/main)
@@ -9,7 +9,7 @@ A Python ETL driver for Facebook Marketing API v22 data extraction and transform
 
 ## Features
 
-- **Facebook Marketing API v22**: Latest API version support with full compatibility
+- **Facebook Marketing API v23**: Latest API version support with full compatibility
 - **Robust Error Handling**: Comprehensive error handling with retry logic and specific exceptions
 - **Multiple Report Types**: Pre-configured report models for common use cases
 - **Custom Reports**: Create custom report configurations
@@ -30,15 +30,26 @@ pip install facebook-ads-reports
 
 ### 1. Set up credentials
 
+**Option A: Configuration file**
+
 Create a `secrets/fb_business_config.json` file with your Facebook Ads API credentials:
 
 ```json
 {
   "app_id": "YOUR_APP_ID",
+  "app_secret": "YOUR_APP_SECRET",
   "access_token": "YOUR_ACCESS_TOKEN",
-  "base_url": "https://graph.facebook.com/v22.0"
   "ad_account_id": "act_1234567890",
+  "base_url": "https://graph.facebook.com/v23.0"
 }
+```
+
+**Option B: Environment variable**
+
+Set the `FACEBOOK_ADS_CONFIG_JSON` environment variable with your credentials as JSON:
+
+```bash
+export FACEBOOK_ADS_CONFIG_JSON='{"app_id": "YOUR_APP_ID", "app_secret": "YOUR_APP_SECRET", "access_token": "YOUR_ACCESS_TOKEN", "ad_account_id": "act_1234567890", "base_url": "https://graph.facebook.com/v23.0"}'
 ```
 
 ### 2. Basic usage
@@ -49,7 +60,7 @@ from facebook_ads_reports import MetaAdsReport, MetaAdsReportModel, load_credent
 
 # Load credentials
 credentials = load_credentials()
-client = MetaAdsReport(credentials)
+client = MetaAdsReport(credentials_dict=credentials)
 
 # Configure report parameters
 ad_account_id = "act_1234567890"
@@ -120,7 +131,7 @@ Check the `examples/` directory for comprehensive usage examples:
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) file for details.
+GPL License. See [LICENSE](LICENSE) file for details.
 
 
 ## Support

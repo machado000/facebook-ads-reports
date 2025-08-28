@@ -1,7 +1,7 @@
 """
 Basic Facebook Ads Report Example
 
-This example demonstrates the basic usage of the google-ads-drv package
+This example demonstrates the basic usage of the facebook-ads-reports package
 to extract data from Facebook Ads API and export it to CSV.
 """
 import json
@@ -14,7 +14,7 @@ from facebook_ads_reports import MetaAdsReport, MetaAdsReportModel
 from facebook_ads_reports import create_output_directory, format_report_filename, load_credentials, setup_logging
 
 
-def main():
+def main() -> None:
     # Setup logging
     setup_logging(level=logging.INFO)
 
@@ -39,7 +39,6 @@ def main():
     report_model = MetaAdsReportModel.ad_performance_report
 
     # Report parameters
-    load_dotenv()
     AD_ACCOUNT_ID = os.getenv("AD_ACCOUNT_ID") or "1234567890"  # Replace with your actual account ID
 
     start_date = date.today() - timedelta(days=1)  # Last 7 days
@@ -54,7 +53,7 @@ def main():
         # Save to CSV
         output_filename = format_report_filename(
             account_id=AD_ACCOUNT_ID,
-            report_name=report_model['report_name'],
+            report_name=report_model['report_name'],  # type: ignore
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat()
         )
