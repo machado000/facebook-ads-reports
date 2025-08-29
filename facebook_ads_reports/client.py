@@ -8,7 +8,6 @@ https://developers.facebook.com/tools/debug/accesstoken
 """
 import json
 import logging
-import pandas as pd
 import requests
 import socket
 
@@ -54,8 +53,8 @@ class MetaAdsReport:
             raise KeyError("credentials_dict must contain 'app_id' and 'access_token' keys") from e
 
     @retry_on_api_error()
-    def get_insights_report(self, ad_account_id: str, report_model: dict,
-                            start_date: date, end_date: date, limit: int = 500):
+    def get_insights_report(self, ad_account_id: str, report_model: Dict[str, Any],
+                            start_date: date, end_date: date, limit: int = 500) -> list[dict[str, Any]]:
         """
         Get insights report from Facebook Marketing API.
 
@@ -66,7 +65,7 @@ class MetaAdsReport:
         - end_date (date): End date for the report.
 
         Returns:
-        - DataFrame: Report data as a pandas DataFrame.
+        - list[dict[str, Any]]: Report data as a list of dictionaries.
         """
         # Validate account ID format
         ad_account_id = validate_account_id(ad_account_id)
@@ -78,7 +77,7 @@ class MetaAdsReport:
         report_name = report_model["report_name"]
         fields = report_model["fields"]
         params = report_model["params"]
-        action_types = report_model.get("action_types")
+        action_types = report_model.get("action_types")  # noqa
 
         # Set time_range parameter if not ads_dimensions_report
         if report_name != "ads_dimensions_report":
@@ -153,23 +152,15 @@ class MetaAdsReport:
                 raise Exception(
                     f"""API request failed with Error code: {response.status_code}, header: {response.headers}, body: {response.text}""")  # noqa
 
-        df = self._convert_response_to_df(response_data, action_types)
+        flattened_response = self._flatten_facebook_ads_response(response_data)
 
-        # Fix data types for database storage
-        df = self._fix_data_types(df)
+        cleaned_response = self._clean_text_encoding(flattened_response)
 
-        # Handle missing values
-        df = self._handle_missing_values(df, fill_numeric_values=None, fill_datetime_values=None, fill_object_values="")
-
-        # Clean text encoding issues
-        df = self._clean_text_encoding(df)
-
-        # Return the final DataFrame
-        logging.info(f"Finished fetching full report with {df.shape[0]} rows and {df.shape[1]} columns")
-        return df
+        logging.info(f"Finished fetching full report with {len(cleaned_response)} rows")
+        return cleaned_response
 
     @retry_on_api_error()
-    def get_campaigns(self, ad_account_id: str, status: Optional[str] = None):
+    def get_campaigns(self, ad_account_id: str, status: Optional[str] = None) -> list[dict[str, Any]]:
         """
         Get campaigns from the specified ad account using requests and pass the access token as an authorization header.
         """
@@ -181,13 +172,13 @@ class MetaAdsReport:
         fields = ["id", "name", "buying_type", "objective", "primary_attribution",
                   "budget_remaining", "effective_status", "created_time", "updated_time"]
 
-        params = {
+        params: dict[str, Any] = {
             "fields": ",".join(fields),
             "limit": 100
         }
 
         if status:
-            params["filtering"] = [{"field": "effective_status", "operator": "IN", "value": [status]}]
+            params["filtering"] = json.dumps([{"field": "effective_status", "operator": "IN", "value": [status]}])
 
         url = f"https://graph.facebook.com/v19.0/{ad_account_id}/campaigns"
 
@@ -198,106 +189,83 @@ class MetaAdsReport:
             response.raise_for_status()
             data = response.json()
 
-            campaigns = data.get("data", [])
-            logging.info(f"Fetched list with {len(campaigns)} items")
+            campaigns_data = data.get("data", [])
+            logging.info(f"Fetched list with {len(campaigns_data)} items")
 
-            df = pd.DataFrame(campaigns)
-            ordered_df = df[fields]
+            # Filter campaigns to only include specified fields
+            filtered_campaigns = [{field: campaign.get(field) for field in fields} for campaign in campaigns_data]
 
         except Exception as e:
             logging.error(e)
             raise Exception
 
-        return ordered_df
+        return filtered_campaigns
 
-    def _flatten_list_of_collections(self, collection_list: list):
-        """
-        Flattens a list of dictionaries into a single dictionary.
+    def _flatten_action_list(self, list_of_dicts: list[dict[str, Any]]) -> dict[str, Any]:
 
-        Parameters:
-        - collection_list (list): A list of dictionaries, where each dictionary
-        represents a collection with "action_type" and "value" keys.
-
-        Returns:
-        - dict or None: A dictionary where "action_type" values are used as keys
-        and corresponding "value" values are used as values. Returns None if
-        the input is not a list.
-        """
-        if not isinstance(collection_list, list):
+        if not isinstance(list_of_dicts, list):
             return None
 
-        flattened_dict = {item["action_type"]: item["value"] for item in collection_list}
+        flattened_dict = {item["action_type"]: item["value"] for item in list_of_dicts}
 
         return flattened_dict
 
-    def _extract_columns_from_dict(self, dataframe, dict_column_name: str, keys_to_extract: Optional[list] = None):
-        dict_list = []
+    def _flatten_video_play_action(self, column_name: str, list_of_dicts: list[dict[str, Any]]) -> Dict[str, Any]:
 
-        for _, row in dataframe.iterrows():
-            if row[dict_column_name]:
-                dict_list.append(row[dict_column_name])
-            else:
-                dict_list.append({})
+        if not isinstance(list_of_dicts, list) or not list_of_dicts:
+            return {}
 
-        temp_df = pd.DataFrame(dict_list)
+        # Take the first item's value (assuming single action type per video column)
+        first_item = list_of_dicts[0]
+        value = first_item.get("value", "")
 
-        if not keys_to_extract:
-            existing_keys = list(temp_df.columns)
-        else:
-            existing_keys = [col for col in keys_to_extract if col in temp_df.columns]
+        # Clean the column name by removing "_actions" suffix
+        clean_key = column_name.replace("_actions", "")
 
-        result_df = temp_df.loc[:, existing_keys]
-        logging.debug(result_df)
+        return {clean_key: value}
 
-        return result_df
-
-    def _extract_single_column_from_dict(self, dataframe, dict_column_name: str, rename_key: bool = True):
-        dict_list = []
-
-        for _, row in dataframe.iterrows():
-            if row[dict_column_name]:
-                dict_list.append(row[dict_column_name])
-            else:
-                dict_list.append({})
-
-        temp_df = pd.DataFrame(dict_list)
-
-        if temp_df.shape[1] != 1:
-            logging.error(f"More than one key found in column '{dict_column_name}' collections.")
-            temp_df = pd.DataFrame()
-
-        if rename_key:
-            # Rename the first data column
-            temp_df.columns.values[0] = dict_column_name.strip("_actions_flat")
-
-        logging.debug(temp_df)
-
-        return temp_df
-
-    def _extract_unique_keys(self, dict_list: list):
+    def _clean_text_encoding(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
-        Extract unique keys from a list of dictionaries.
+        Cleans text values in a list of dictionaries for character encoding issues.
 
         Parameters:
-        - dict_list (list): A list of dictionaries to extract keys from.
+        - data: List of dictionaries to clean
 
         Returns:
-        - list: A list containing unique keys from all dictionaries in dict_list.
+        - list[dict]: Cleaned list of dictionaries
         """
-        unique_keys = set()
+        try:
+            cleaned_data = []
 
-        for row in dict_list:
-            if row and isinstance(row, dict):
-                unique_keys.update(row.keys())
+            for row in data:
+                cleaned_row = {}
 
-        unique_keys = list(unique_keys)
-        logging.info(f"Extracted {len(unique_keys)} unique_keys.")
-        logging.debug(unique_keys)
+                for key, value in row.items():
+                    # Only process string values
+                    if isinstance(value, str):
+                        # Handle common encoding issues
+                        cleaned_value = str(value)
+                        # Remove or replace problematic characters
+                        cleaned_value = cleaned_value.encode('ascii', 'ignore').decode('ascii')  # Remove non-ASCII
+                        cleaned_value = cleaned_value.replace('\x00', '')  # Remove null bytes
+                        cleaned_value = cleaned_value.replace('\r', ' ').replace('\n', ' ')  # Remove line breaks
+                        cleaned_value = cleaned_value.strip()  # Remove leading/trailing whitespace
+                        # Limit string length for database compatibility (adjust as needed)
+                        cleaned_value = cleaned_value[:255]
+                        cleaned_row[key] = cleaned_value
+                    else:
+                        # Keep non-string values as-is
+                        cleaned_row[key] = value
 
-        return unique_keys
+                cleaned_data.append(cleaned_row)
 
-    def _convert_response_to_df(self, response: list[dict[str, Any]],
-                                action_types: Optional[list] = None) -> pd.DataFrame:
+            return cleaned_data
+
+        except Exception as e:
+            logging.warning(f"Character encoding cleanup failed: {e}")
+            return data
+
+    def _flatten_facebook_ads_response(self, response: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Converts the Facebook Marketing API json response key `data` to dataFrame.
 
@@ -313,209 +281,59 @@ class MetaAdsReport:
         try:
             if not response:
                 logging.info("Response is empty, creating empty DataFrame")
-                return pd.DataFrame()
+                return []
 
             # Check if response is a list of dictionaries (list[dict[str, Any]])
             if not isinstance(response, list) or not all(isinstance(item, dict) for item in response):
                 raise DataProcessingError("API response must be a json like object or a list of dictionaries")
 
-            # Create a DataFrame from the response data
-            df = pd.json_normalize(response)
+            # Create a copy to avoid modifying the original
+            flattened_response = []
 
-            # Flatten multiple dict column in list
-            single_dict_columns = [
+            list_of_dict_columns = [
                 "actions", "conversions", "conversion_values",
                 "converted_product_quantity", "converted_product_value",
             ]
 
-            for item in single_dict_columns:
-                if item in df.columns.values:
-                    logging.debug(f"Flattening column '{item}'")
-
-                    item_flat = f"{item}_flat"
-                    df[item_flat] = df[item].apply(self._flatten_list_of_collections)
-
-                    new_df = self._extract_columns_from_dict(
-                        dataframe=df, dict_column_name=item_flat, keys_to_extract=action_types)
-
-                    df = df.drop(columns=[item])
-                    df = df.drop(columns=[item_flat])
-                    df = pd.concat([df, new_df], axis=1)
-
-            # Flatten single dict columns in list
-            single_dict_columns = [
+            video_actions_columns = [
                 "video_play_actions", "video_p25_watched_actions", "video_p50_watched_actions",
                 "video_p75_watched_actions", "video_p100_watched_actions",
             ]
 
-            for item in single_dict_columns:
-                if item in df.columns.values:
-                    logging.debug(f"Flattening column '{item}'")
+            for row in response:
+                flattened_row = row.copy()
 
-                    item_flat = f"{item}_flat"
-                    df[item_flat] = df[item].apply(self._flatten_list_of_collections)
+                for column in list_of_dict_columns:
+                    if column in flattened_row:
+                        logging.debug(f"Flattening column '{column}'")
 
-                    new_df = self._extract_single_column_from_dict(dataframe=df, dict_column_name=item_flat)
+                        # Flatten the list of dicts to a single dict
+                        flattened_dict = self._flatten_action_list(flattened_row[column])
 
-                    df = df.drop(columns=[item])
-                    df = df.drop(columns=[item_flat])
-                    df = pd.concat([df, new_df], axis=1)
+                        # Remove the original column
+                        del flattened_row[column]
 
-            return df
+                        for key, value in flattened_dict.items():
+                            flattened_row[key] = value
+
+                for column in video_actions_columns:
+                    if column in flattened_row:
+                        logging.debug(f"Flattening column '{column}'")
+
+                        # Flatten the list of dicts to a single dict
+                        flattened_dict = self._flatten_video_play_action(column, flattened_row[column])
+
+                        # Remove the original column
+                        del flattened_row[column]
+
+                        for key, value in flattened_dict.items():
+                            flattened_row[key] = value
+
+                # Add the flattened row to the response
+                flattened_response.append(flattened_row)
+
+            return flattened_response
 
         except Exception as e:
             raise DataProcessingError(
                 "Failed to convert API response to DataFrame", original_error=e) from e
-
-    def _fix_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Optimizes data types for database storage.
-        """
-
-        df = df.copy()
-
-        try:
-            # 1. Fix date columns (these come as strings from API)
-            datetime_terms = ['date', 'time', 'created', 'updated', 'inserted']
-            date_columns = [col for col in df.columns if any(term in col for term in datetime_terms)]
-            for col in date_columns:
-                if col in df.columns and df[col].dtype == 'object':
-                    df[col] = pd.to_datetime(df[col], errors='raise')  # Fail fast if dates are invalid
-                    logging.debug(f"Converted {col} to datetime")
-
-            # 2. Dynamically find and convert metric columns that come as 'object' but should be numeric
-            metrics_to_convert = []
-
-            # Find all columns that do not match exclude_terms and are currently 'object' type
-            exclude_terms = ['id', 'name', 'type', 'platform', 'date', 'setting', 'objective', 'optimization']
-            for col in df.columns:
-                if df[col].dtype == 'object' and not any(
-                    col == term or
-                    col.startswith(f"{term}_") or
-                    col.endswith(f"_{term}")
-                    for term in exclude_terms
-                ):
-                    metrics_to_convert.append(col)
-
-            logging.debug(f"Columns considered for numeric conversion: {metrics_to_convert}")
-
-            for col in metrics_to_convert:
-                logging.debug(
-                    f"Column '{col}' dtype before: {df[col].dtype}, sample values: {df[col].head(5).tolist()}")
-                try:
-                    # First convert to numeric to see what we get
-                    numeric_series = pd.to_numeric(df[col], errors='raise')
-
-                    # Determine if it should be int or float based on the data
-                    if self._should_be_integer(numeric_series):
-                        df[col] = numeric_series.astype('Int64')
-                        logging.debug(f"Converted {col} from numeric to Int64")
-                    else:
-                        df[col] = numeric_series.astype('float64')
-                        logging.debug(f"Converted {col} from numeric to float64")
-
-                except ValueError as e:
-                    logging.warning(f"Could not convert {col} to numeric: {e}")
-                    # Keep as object type if conversion fails
-
-                logging.debug(f"Column '{col}' dtype after: {df[col].dtype}, sample values: {df[col].head(5).tolist()}")
-
-            return df
-
-        except Exception as e:
-            logging.error(f"Data type optimization failed: {e}")
-            return df
-
-    def _should_be_integer(self, numeric_series: pd.Series) -> bool:
-        """
-        Determines if a numeric series should be stored as integer or float.
-
-        Parameters:
-        - numeric_series: The pandas Series with numeric data
-
-        Returns:
-        - bool: True if should be integer, False if should be float
-        """
-        # Remove NaN values for analysis
-        clean_series = numeric_series.dropna()
-
-        if len(clean_series) == 0:
-            return False  # Default to float if no data
-
-        # If all values are whole numbers, use integer
-        if (clean_series % 1 == 0).all():
-            return True
-
-        return False  # Has decimals, should be float
-
-    def _handle_missing_values(self, df: pd.DataFrame,
-                               fill_numeric_values: Optional[str] = None,
-                               fill_datetime_values: Optional[str] = None,
-                               fill_object_values: str = "") -> pd.DataFrame:
-        """
-        Handles missing values appropriately based on column types.
-
-        Parameters:
-        - fill_numeric_values: Value to fill NaN in numeric columns (empty = preserve NaN)
-        - fill_datetime_values: Value to fill NaT in datetime columns (empty = preserve NaT)
-        - fill_object_values: Value to fill NaN in object/text columns (empty string by default)
-        """
-
-        if not fill_datetime_values and not fill_numeric_values and not fill_object_values:
-            logging.debug("No fill values provided, preserving NaN/NaT for numeric and datetime columns")
-            return df
-
-        try:
-            for col in df.columns:
-                # Case 1: Numeric columns (int, float)
-                if pd.api.types.is_numeric_dtype(df[col]) and fill_numeric_values not in (None, ""):
-                    try:
-                        # Attempt to convert to numeric value
-                        if fill_numeric_values is not None:
-                            fill_val = float(fill_numeric_values)
-                            df[col] = df[col].fillna(fill_val)
-                    except (ValueError, TypeError):
-                        pass  # Keep NaN if conversion fails
-
-                # Case 2: Datetime columns
-                elif pd.api.types.is_datetime64_any_dtype(df[col]) and fill_datetime_values not in (None, ""):
-                    try:
-                        # Attempt to convert to datetime
-                        if fill_datetime_values is not None:
-                            fill_datetime = pd.to_datetime(fill_datetime_values, errors='raise')
-                            df[col] = df[col].fillna(fill_datetime)
-                    except (ValueError, TypeError, pd.errors.ParserError):
-                        pass  # Keep NaT if conversion fails
-
-                # Case 3: Object columns (text, categorical)
-                elif pd.api.types.is_object_dtype(df[col]) and fill_object_values != "":
-                    # Always fill object columns with the specified value
-                    df[col] = df[col].fillna(fill_object_values)
-
-            return df
-
-        except Exception as e:
-            logging.warning(f"Missing value handling failed: {e}")
-            return df
-
-    def _clean_text_encoding(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Cleans text columns for character encoding issues.
-        """
-        try:
-            for col in df.select_dtypes(include=['object']).columns:
-                if df[col].dtype == 'object':
-                    # Handle common encoding issues
-                    df[col] = df[col].astype(str)
-                    # Remove or replace problematic characters
-                    df[col] = df[col].str.replace(r'[^\x00-\x7F]+', '', regex=True)  # Remove non-ASCII
-                    df[col] = df[col].str.replace('\x00', '', regex=False)  # Remove null bytes
-                    df[col] = df[col].str.replace(r'[\r\n]+', ' ', regex=True)  # Remove line breaks
-                    df[col] = df[col].str.strip()  # Remove leading/trailing whitespace
-                    # Limit string length for database compatibility (adjust as needed)
-                    df[col] = df[col].str[:255]
-            return df
-
-        except Exception as e:
-            logging.warning(f"Character encoding cleanup failed: {e}")
-            return df

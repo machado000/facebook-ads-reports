@@ -1,12 +1,13 @@
 """
 Custom exceptions for the Facebook Ads driver module.
 """
+from typing import Any, Optional
 
 
 class MetaAdsReportError(Exception):
     """Base exception for all Facebook Marketing API errors."""
 
-    def __init__(self, message: str, original_error=None, **context):
+    def __init__(self, message: str, original_error: Optional[Exception] = None, **context: Any) -> None:
         self.message = message
         self.original_error = original_error
         self.context = context

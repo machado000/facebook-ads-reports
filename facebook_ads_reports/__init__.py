@@ -22,7 +22,10 @@ from .utils import (
     validate_account_id,
     create_output_directory,
     format_report_filename,
-    get_month_date_pairs
+    get_month_date_pairs,
+    get_unique_keys_from_response,
+    save_report_to_csv,
+    save_report_to_json
 )
 
 # Main exports
@@ -44,6 +47,9 @@ __all__ = [
     "create_output_directory",
     "format_report_filename",
     "get_month_date_pairs",
+    "get_unique_keys_from_response",
+    "save_report_to_csv",
+    "save_report_to_json",
     # __init__
     "setup_logging",
 ]

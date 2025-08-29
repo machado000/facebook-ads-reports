@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-08-29
+
+### Added
+- New utility functions `save_report_to_csv()` and `save_report_to_json()` for flexible data export
+- Comprehensive type hints throughout the codebase with strict mypy compliance
+- Enhanced error handling with properly typed exceptions
+
+### Changed
+- **BREAKING**: Removed pandas dependency for lighter, more flexible data handling
+- **BREAKING**: `get_insights_report()` now returns `list[dict[str, Any]]` instead of pandas DataFrame
+- **BREAKING**: Updated function signatures with complete type annotations
+- Improved docstring consistency and parameter documentation
+- Enhanced mypy strict mode compliance with proper type checking
+
+### Removed
+- **BREAKING**: Pandas dependency and all DataFrame-related functionality
+- **BREAKING**: Database optimization features specific to pandas DataFrames
+
+### Fixed
+- All mypy type checking errors resolved
+- Consistent parameter documentation in docstrings
+- Proper type annotations for all function parameters and return values
+
+### Technical
+- Added `types-requests` development dependency for proper type checking
+- Updated VS Code tasks configuration for correct mypy execution
+- Improved code maintainability with strict typing
+
 ## [1.0.0] - 2025-08-28
 
 ### Added

@@ -1,6 +1,6 @@
 # Facebook Ads Reports Helper
 
-A Python ETL driver for Facebook Marketing API v23 data extraction and transformation. Simplifies the process of extracting Facebook Ads data and converting it to database-ready pandas DataFrames with comprehensive optimization features.
+A Python ETL driver for Facebook Marketing API v23 data extraction and transformation. Simplifies the process of extracting Facebook Ads data and converting it to structured data formats with comprehensive utility functions.
 
 [![PyPI version](https://img.shields.io/pypi/v/facebook-ads-reports)](https://pypi.org/project/facebook-ads-reports/)
 [![Last Commit](https://img.shields.io/github/last-commit/machado000/facebook-ads-reports)](https://github.com/machado000/facebook-ads-reports/commits/main)
@@ -13,12 +13,10 @@ A Python ETL driver for Facebook Marketing API v23 data extraction and transform
 - **Robust Error Handling**: Comprehensive error handling with retry logic and specific exceptions
 - **Multiple Report Types**: Pre-configured report models for common use cases
 - **Custom Reports**: Create custom report configurations
-- **Database-Ready DataFrames**: Optimized data types and encoding for seamless database storage
-- **Smart Type Detection**: Dynamic conversion of metrics to appropriate int64/float64 types
-- **Configurable Missing Values**: Granular control over NaN/NaT handling by column type
-- **Character Encoding Cleanup**: Automatic text sanitization for database compatibility
-- **Zero Impression Filtering**: Robust filtering handling multiple zero representations
-- **Type Hints**: Full type hint support for better IDE experience
+- **Flexible Data Export**: Built-in CSV and JSON export utilities
+- **Lightweight Architecture**: No pandas dependency for faster installations and smaller footprint
+- **Type Hints**: Full type hint support with strict mypy compliance for better IDE experience
+- **Data Processing Utilities**: Helper functions for data transformation and export
 
 ## Installation
 
@@ -56,7 +54,8 @@ export FACEBOOK_ADS_CONFIG_JSON='{"app_id": "YOUR_APP_ID", "app_secret": "YOUR_A
 
 ```python
 from datetime import date, timedelta
-from facebook_ads_reports import MetaAdsReport, MetaAdsReportModel, load_credentials
+from facebook_ads_reports import MetaAdsReport, MetaAdsReportModel
+from facebook_ads_reports.utils import load_credentials, save_report_to_csv, save_report_to_json
 
 # Load credentials
 credentials = load_credentials()
@@ -67,16 +66,19 @@ ad_account_id = "act_1234567890"
 start_date = date.today() - timedelta(days=7)
 end_date = date.today() - timedelta(days=1)
 
-# Extract report data with database optimization
-df = client.get_insights_report(
+# Extract report data
+data = client.get_insights_report(
         ad_account_id=ad_account_id,
         report_model=MetaAdsReportModel.ad_performance_report,
         start_date=start_date,
         end_date=end_date
 )
 
-# Save to CSV
-df.to_csv("ad_performance_report.csv", index=False)
+# Save to CSV using utility function
+save_report_to_csv(data, "ad_performance_report.csv")
+
+# Save to JSON using utility function
+save_report_to_json(data, "ad_performance_report.json")
 ```
 
 
@@ -99,19 +101,8 @@ custom_report = create_custom_report(
 )
 
 # Usage:
-# df = client.get_insights_report(ad_account_id, custom_report, start_date, end_date)
+# data = client.get_insights_report(ad_account_id, custom_report, start_date, end_date)
 ```
-
-## Database Optimization Features
-
-- **Automatic Date Conversion**: String dates → `datetime64[ns]`
-- **Dynamic Metrics Conversion**: Object metrics → `int64` or `float64` based on data
-- **Preserve NULL Compatibility**: NaN/NaT preserved for database NULL mapping
-- **Safe Conversion**: Invalid values gracefully ignored
-- **ASCII Sanitization**: Removes non-ASCII characters for database compatibility
-- **Length Limiting**: Truncates text to 255 characters (configurable)
-- **Whitespace Trimming**: Removes leading/trailing whitespace
-
 
 ## Examples
 
@@ -123,10 +114,7 @@ Check the `examples/` directory for comprehensive usage examples:
 ## Requirements
 
 - Python 3.10-3.12
-- pandas >= 2.0.0
-- python-dotenv >= 1.0.0
 - requests >= 2.32.4
-- tqdm >= 4.65.0
 
 
 ## License
