@@ -1,12 +1,12 @@
 [project]
 name = "facebook-ads-reports"
-version = "1.0.1"
-description = "ETL module for Facebook Ads API v22 with database-optimized DataFrame processing"
+version = "2.0.0"
+description = "ETL module for Facebook Ads API v23 with lightweight native Python data processing"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
 license = { text = "GPL" }
 requires-python = ">=3.10,<3.13"
-keywords = ["facebook-ads", "pandas", "etl", "data-extraction", "reports"]
+keywords = ["facebook-ads", "etl", "data-extraction", "reports", "flatten-json"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -22,17 +22,14 @@ classifiers = [
     "Typing :: Typed"
 ]
 dependencies = [
-    "pandas (>=2.3.2,<3.0.0)",
     "python-dotenv (>=1.1.1,<2.0.0)",
     "requests (>=2.32.4,<3.0.0)",
-    "tqdm (>=4.67.1,<5.0.0)",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "mypy>=1.0.0",
-    "pandas-stubs>=2.0.0.230412",
 ]
 
 [project.urls]
@@ -45,6 +42,11 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 packages = [{ include = "facebook_ads_reports" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+mypy = "^1.17.1"
+types-requests = "^2.32.4.20250809"
 
 [tool.mypy]
 python_version = "3.10"
