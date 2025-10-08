@@ -113,7 +113,7 @@ Check the `examples/` directory for comprehensive usage examples:
 
 ## Requirements
 
-- Python 3.10-3.12
+- Python 3.11-3.14
 - requests >= 2.32.4
 
 
