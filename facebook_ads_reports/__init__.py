@@ -2,7 +2,7 @@
 Facebook Ads Reports Driver - A Python ETL module for Facebook Marketing API data extraction.
 
 This package provides tools for extracting, transforming, and loading Facebook Ads data
-using the Facebook Marketing API with pandas DataFrame outputs.
+using the Facebook Marketing API with native Python list/dict outputs.
 """
 import logging
 from typing import Optional

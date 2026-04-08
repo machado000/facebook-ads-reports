@@ -1,6 +1,6 @@
 [project]
 name = "facebook-ads-reports"
-version = "2.0.1"
+version = "2.1.0"
 description = "ETL module for Facebook Ads API v23 with lightweight native Python data processing"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
@@ -27,10 +27,11 @@ dependencies = [
     "requests (>=2.32.4,<3.0.0)",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.0.0",
     "mypy>=1.0.0",
+    "types-requests>=2.32.4.20250809",
 ]
 
 [project.urls]
@@ -38,19 +39,11 @@ Homepage = "https://github.com/machado000/facebook-ads-reports"
 Issues = "https://github.com/machado000/facebook-ads-reports/issues"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry]
-packages = [{ include = "facebook_ads_reports" }]
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.4.1"
-mypy = "^1.17.1"
-types-requests = "^2.32.4.20250809"
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true
 disallow_untyped_defs = true
 check_untyped_defs = true

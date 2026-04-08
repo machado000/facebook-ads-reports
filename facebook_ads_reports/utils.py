@@ -121,7 +121,7 @@ def create_output_directory(path: str) -> Path:
 
 
 def format_report_filename(report_name: str, account_id: str,
-                           start_date: str, end_date: str,
+                           start_date: str | None, end_date: str | None,
                            file_extension: str = "csv") -> str:
     """
     Generate a standardized filename for report exports.
@@ -140,7 +140,16 @@ def format_report_filename(report_name: str, account_id: str,
     safe_report_name = report_name.replace(" ", "_").lower()
     safe_account_id = validate_account_id(account_id)
 
-    return f"{safe_report_name}_{safe_account_id}_{start_date}_{end_date}.{file_extension}"
+    filename_parts = [safe_report_name, safe_account_id]
+
+    if start_date and start_date != '':
+        filename_parts.append(start_date)
+    if end_date and end_date != '':
+        filename_parts.append(end_date)
+
+    filename = f"{'_'.join(filename_parts)}.{file_extension}"
+
+    return filename
 
 
 def get_month_date_pairs(start_date: date, end_date: date) -> list[tuple[date, date]]:
@@ -227,7 +236,7 @@ def get_unique_keys_from_response(response: list[dict[str, Any]]) -> list[str]:
         raise ValidationError(f"Failed to extract unique keys from response: {str(e)}") from e
 
 
-def save_report_to_csv(data: list[dict[str, Any]], filepath: str) -> str:
+def save_report_to_csv(data: list[dict[str, Any]], filepath: str, sort_columns: bool = True) -> str:
     """
     Save report data to CSV file.
 
@@ -257,7 +266,7 @@ def save_report_to_csv(data: list[dict[str, Any]], filepath: str) -> str:
         fieldnames_set: set[str] = set()
         for row in data:
             fieldnames_set.update(row.keys())
-        fieldnames = sorted(list(fieldnames_set))
+        fieldnames = sorted(list(fieldnames_set)) if sort_columns else list(fieldnames_set)
 
         # Write to CSV
         with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:

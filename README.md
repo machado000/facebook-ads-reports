@@ -24,6 +24,12 @@ A Python ETL driver for Facebook Marketing API v23 data extraction and transform
 pip install facebook-ads-reports
 ```
 
+Using uv:
+
+```bash
+uv add facebook-ads-reports
+```
+
 ## Quick Start
 
 ### 1. Set up credentials
@@ -67,29 +73,38 @@ start_date = date.today() - timedelta(days=7)
 end_date = date.today() - timedelta(days=1)
 
 # Extract report data
-data = client.get_insights_report(
-        ad_account_id=ad_account_id,
-        report_model=MetaAdsReportModel.ad_performance_report,
-        start_date=start_date,
-        end_date=end_date
+data = client.get_report(
+  ad_account_id=ad_account_id,
+  report_model=MetaAdsReportModel.ad_insights_report,
+  start_date=start_date,
+  end_date=end_date,
+  flatten=True,
+  limit=200,
 )
 
 # Save to CSV using utility function
-save_report_to_csv(data, "ad_performance_report.csv")
+save_report_to_csv(data, "ad_insights_report.csv")
 
 # Save to JSON using utility function
-save_report_to_json(data, "ad_performance_report.json")
+save_report_to_json(data, "ad_insights_report.json")
 ```
 
 
 ## Available Report Models
 
-- `MetaAdsReportModel.ad_dimensions_report` - Ad dimensions and metadata
-- `MetaAdsReportModel.ad_performance_report` - Ad performance and actions metrics
+- `MetaAdsReportModel.ad_accounts_report` - Ad account metadata available for the token
+- `MetaAdsReportModel.campaigns_report` - Campaign setup, objective, and budget fields
+- `MetaAdsReportModel.adsets_report` - Ad set configuration and targeting payloads
+- `MetaAdsReportModel.ad_summary_report` - Ad-level metadata and status
+- `MetaAdsReportModel.ad_dimensions_report` - Ad dimensions and aggregate context fields
+- `MetaAdsReportModel.ad_insights_report` - Ad metrics and actions over time
+- `MetaAdsReportModel.ad_performance_report` - Backward-compatible alias of `ad_insights_report`
+
+You can also list models dynamically with `MetaAdsReportModel.list_available_reports()`.
 
 ## Custom Reports
 
-Create custom report configurations:
+Create custom model metadata templates:
 
 ```python
 from facebook_ads_reports import create_custom_report
@@ -100,8 +115,8 @@ custom_report = create_custom_report(
     from_table="ad_insights"
 )
 
-# Usage:
-# data = client.get_insights_report(ad_account_id, custom_report, start_date, end_date)
+# This helper is intended for custom ETL metadata flows.
+# For API extraction with get_report(), use a model that contains endpoint/fields/params.
 ```
 
 ## Examples
@@ -115,6 +130,24 @@ Check the `examples/` directory for comprehensive usage examples:
 
 - Python 3.11-3.14
 - requests >= 2.32.4
+- python-dotenv >= 1.1.1
+
+## Development & Publishing
+
+```bash
+# install runtime + dev dependencies
+uv sync --all-groups
+
+# quality gates
+uv run pytest
+uv run mypy facebook_ads_reports
+
+# build wheel and sdist
+uv build
+
+# publish to PyPI (requires token/auth configured)
+uv publish
+```
 
 
 ## License

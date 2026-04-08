@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- No unreleased changes yet
+
+## [2.1.0] - 2026-04-08
+
+### Added
+- Backward-compatible report model alias `MetaAdsReportModel.ad_performance_report` pointing to `ad_insights_report`
+- Expanded report model registry so all pre-configured models are discoverable via `get_all_reports()` and `list_available_reports()`
+
+### Changed
+- Bumped package version to 2.1.0 for model and API compatibility improvements
+- Updated README examples to use `get_report()` and current model set
+- Fully refreshed project roadmap for Facebook Ads scope and current milestones
+- Improved package and client docstrings for the current native Python (no pandas) architecture
+- Added explanatory comments to `examples/basic_usage.py` around credentials and report/date behavior
+
+### Fixed
+- Fixed model definition syntax issues in `campaigns_report` and `adsets_report`
+- Corrected pagination flow in `MetaAdsReport.get_report()` so next page URLs are followed consistently
+- Prevented report model params from being mutated across repeated `get_report()` calls
+
+### Technical
+- Confirmed dependency declarations remain up-to-date for runtime and development workflows
+
 ## [2.0.1] - 2025-10-08
 
 ### Changed
