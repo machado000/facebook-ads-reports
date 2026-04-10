@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - No unreleased changes yet
 
+## [2.1.1] - 2026-04-10
+
+### Changed
+- Improved `MetaAdsReport._clean_text_encoding()` to preserve Unicode characters (including accents) while normalizing strings to NFC
+
+### Fixed
+- Replaced ASCII-stripping behavior in text cleanup that could remove valid non-ASCII characters from API responses
+- Sanitized nested string values recursively while removing null bytes and unsafe control characters
+
 ## [2.1.0] - 2026-04-08
 
 ### Added

@@ -17,6 +17,7 @@ A Python ETL driver for Facebook Marketing API v23 data extraction and transform
 - **Lightweight Architecture**: No pandas dependency for faster installations and smaller footprint
 - **Type Hints**: Full type hint support with strict mypy compliance for better IDE experience
 - **Data Processing Utilities**: Helper functions for data transformation and export
+- **Unicode-Safe Text Cleaning**: Response cleanup preserves accents and Unicode while removing null bytes and unsafe control characters
 
 ## Installation
 

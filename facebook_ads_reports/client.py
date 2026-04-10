@@ -10,6 +10,7 @@ import json
 import logging
 import requests
 import socket
+import unicodedata
 
 from datetime import date, datetime
 from typing import Any, Dict
@@ -138,6 +139,7 @@ class MetaAdsReport:
 
         while url:
             # Send the GET request with Authorization header
+            logging.debug(f"Making API request to URL: {url} with params: {query_params}")
             response = requests.get(url, headers=headers, params=query_params)
 
             # Check for successful response
@@ -181,41 +183,58 @@ class MetaAdsReport:
 
     def _clean_text_encoding(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
-        Cleans text values in a list of dictionaries for character encoding issues.
+        Clean text values without removing Unicode characters.
 
-        Parameters:
-        - data: List of dictionaries to clean
-
-        Returns:
-        - list[dict]: Cleaned list of dictionaries
+        Behavior:
+        - Preserve accents and all valid Unicode.
+        - Normalize to NFC for consistency.
+        - Remove NULL and other problematic control chars.
+        - Keep line breaks by default (optional to collapse).
+        - No truncation by default.
         """
+        def _sanitize_string(
+            value: str,
+            *,
+            normalize_form: str = "NFC",
+            strip_controls: bool = True,
+            collapse_line_breaks: bool = False,
+            trim_whitespace: bool = True,
+            max_length: int | None = None,
+        ) -> str:
+            s = unicodedata.normalize(normalize_form, value)
+
+            if strip_controls:
+                # Keep tab/newline/carriage-return unless explicitly collapsed.
+                allowed = {"\t", "\n", "\r"}
+                s = "".join(
+                    ch for ch in s
+                    if ch >= " " or ch in allowed
+                )
+                # Always remove NULL explicitly
+                s = s.replace("\x00", "")
+
+            if collapse_line_breaks:
+                s = s.replace("\r", " ").replace("\n", " ")
+
+            if trim_whitespace:
+                s = s.strip()
+
+            if max_length is not None:
+                s = s[:max_length]
+
+            return s
+
+        def _sanitize_value(v: Any) -> Any:
+            if isinstance(v, str):
+                return _sanitize_string(v)
+            if isinstance(v, list):
+                return [_sanitize_value(item) for item in v]
+            if isinstance(v, dict):
+                return {k: _sanitize_value(val) for k, val in v.items()}
+            return v
+
         try:
-            cleaned_data = []
-
-            for row in data:
-                cleaned_row = {}
-
-                for key, value in row.items():
-                    # Only process string values
-                    if isinstance(value, str):
-                        # Handle common encoding issues
-                        cleaned_value = str(value)
-                        # Remove or replace problematic characters
-                        cleaned_value = cleaned_value.encode('ascii', 'ignore').decode('ascii')  # Remove non-ASCII
-                        cleaned_value = cleaned_value.replace('\x00', '')  # Remove null bytes
-                        cleaned_value = cleaned_value.replace('\r', ' ').replace('\n', ' ')  # Remove line breaks
-                        cleaned_value = cleaned_value.strip()  # Remove leading/trailing whitespace
-                        # Limit string length for database compatibility (adjust as needed)
-                        cleaned_value = cleaned_value[:255]
-                        cleaned_row[key] = cleaned_value
-                    else:
-                        # Keep non-string values as-is
-                        cleaned_row[key] = value
-
-                cleaned_data.append(cleaned_row)
-
-            return cleaned_data
-
+            return [_sanitize_value(row) for row in data]
         except Exception as e:
             logging.warning(f"Character encoding cleanup failed: {e}")
             return data
