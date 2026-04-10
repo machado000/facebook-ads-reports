@@ -24,6 +24,7 @@ from .utils import (
     format_report_filename,
     get_month_date_pairs,
     get_unique_keys_from_response,
+    convert_keys_case,
     save_report_to_csv,
     save_report_to_json
 )
@@ -48,6 +49,7 @@ __all__ = [
     "format_report_filename",
     "get_month_date_pairs",
     "get_unique_keys_from_response",
+    "convert_keys_case",
     "save_report_to_csv",
     "save_report_to_json",
     # __init__

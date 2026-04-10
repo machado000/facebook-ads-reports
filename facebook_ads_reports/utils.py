@@ -6,6 +6,7 @@ import csv
 import json
 import logging
 import os
+import re
 
 from datetime import date, datetime
 from pathlib import Path
@@ -234,6 +235,50 @@ def get_unique_keys_from_response(response: list[dict[str, Any]]) -> list[str]:
 
     except Exception as e:
         raise ValidationError(f"Failed to extract unique keys from response: {str(e)}") from e
+
+
+def convert_keys_case(data: list[dict[str, Any]], case: str = "snake") -> list[dict[str, Any]]:
+    """
+    Convert all keys in a list of dictionaries to the specified case.
+
+    Parameters:
+    - data: List of dictionaries
+    - case: Target case ("snake" or "camel")
+
+    Returns:
+    - List of dictionaries with converted keys
+    """
+    def to_snake_case(s: str) -> str:
+        s = s.strip()
+        s = re.sub(r'[ \-\.]', '_', s)
+        return re.sub(r'(?<!^)(?=[A-Z])', '_', s).lower()
+
+    def to_camel_case(s: str) -> str:
+        s = s.strip()
+        s = re.sub(r'[ \-\.]', '_', s)
+        s = re.sub(r'(?<!^)(?=[A-Z])', '_', s)
+        parts = [part for part in s.split('_') if part]
+        if not parts:
+            return ''
+        head = parts[0].lower()
+        tail = ''.join(word.lower().capitalize() for word in parts[1:])
+        return head + tail
+
+    if case not in {"snake", "camel"}:
+        raise ValueError("Invalid case specified. Use 'snake' or 'camel'.")
+
+    converted_data = []
+    for row in data:
+        converted_row = {}
+        for key, value in row.items():
+            if case == "camel":
+                new_key = to_camel_case(key)
+            else:
+                new_key = to_snake_case(key)
+            converted_row[new_key] = value
+        converted_data.append(converted_row)
+
+    return converted_data
 
 
 def save_report_to_csv(data: list[dict[str, Any]], filepath: str, sort_columns: bool = True) -> str:

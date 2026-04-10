@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - No unreleased changes yet
 
+## [2.1.2] - 2026-04-10
+
+### Added
+- Exported `convert_keys_case` in package-level public API (`facebook_ads_reports.__init__`)
+
+### Changed
+- Renamed internal variable `response_data_cased` to `response_data_snake_case` in `MetaAdsReport.get_report()` for clearer intent
+- Added reusable release/publish checklist skill document at project root
+
 ## [2.1.1] - 2026-04-10
 
 ### Changed

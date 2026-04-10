@@ -13,10 +13,10 @@ import socket
 import unicodedata
 
 from datetime import date, datetime
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 from .exceptions import DataProcessingError, ValidationError
 from .retry import retry_on_api_error
-from .utils import validate_account_id
+from .utils import validate_account_id, convert_keys_case
 
 # Set timeout for all http connections
 TIMEOUT_IN_SEC = 60 * 3  # seconds timeout limit
@@ -63,18 +63,33 @@ class MetaAdsReport:
                    start_date: date | None, end_date: date | None,
                    flatten: bool = True, limit: int = 200) -> list[dict[str, Any]]:
         """
-        Get a report from Facebook Marketing API using a report model configuration.
+        Retrieve a report from the Facebook Marketing API using a report model configuration.
 
-        Parameters:
-        - ad_account_id (str): Ad account ID.
-        - report_model (dict): Report model containing endpoint, fields, and params.
-        - start_date (date | None): Start date for insights-based reports.
-        - end_date (date | None): End date for insights-based reports.
-        - flatten (bool): Whether to flatten nested JSON structures in the response.
-        - limit (int): Number of records to fetch per API call (pagination limit).
+        This method handles pagination automatically, converts nested JSON structures,
+        and optionally flattens the response data. It supports both account-level and
+        insights-based reports with configurable date ranges.
 
-        Returns:
-        - list[dict[str, Any]]: Report data as a list of dictionaries.
+        Args:
+            ad_account_id (str): The Facebook Ad Account ID. Ignored for ad_accounts_report.
+            report_model (Dict[str, Any]): Report configuration containing:
+                - report_name (str): Name of the report type (e.g., 'ad_insights_report').
+                - endpoint (str): API endpoint path.
+                - fields (list): Fields to retrieve from the API.
+                - params (dict): Additional query parameters.
+            start_date (date | None): Report start date. Required for insights-based reports.
+            end_date (date | None): Report end date. Required for insights-based reports.
+            flatten (bool, optional): Whether to flatten nested JSON structures. Defaults to True.
+            limit (int, optional): Number of records per API request (pagination size). Defaults to 200.
+
+            list[dict[str, Any]]: List of report records with snake_case keys and cleaned text encoding.
+
+        Raises:
+            Exception: If the API request fails (non-200 status code).
+
+        Note:
+            - Automatically handles pagination through all available pages.
+            - Converts field names to snake_case and cleans text encoding.
+            - Logs detailed information about request parameters, pagination progress, and quota usage.
         """
 
         report_name = report_model["report_name"]
@@ -171,8 +186,10 @@ class MetaAdsReport:
                 raise Exception(
                     f"""API request failed with Error code: {response.status_code}, header: {response.headers}, body: {response.text}""")  # noqa
 
+        response_data_snake_case = convert_keys_case(response_data, case="snake")
+
         if flatten:
-            flattened_response = self._flatten_facebook_ads_response(response_data)
+            flattened_response = self._flatten_facebook_ads_response(response_data_snake_case)
         else:
             flattened_response = response_data
 
@@ -195,7 +212,7 @@ class MetaAdsReport:
         def _sanitize_string(
             value: str,
             *,
-            normalize_form: str = "NFC",
+            normalize_form: Literal["NFC", "NFD", "NFKC", "NFKD"] = "NFC",
             strip_controls: bool = True,
             collapse_line_breaks: bool = False,
             trim_whitespace: bool = True,

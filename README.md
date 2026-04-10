@@ -148,6 +148,11 @@ uv build
 
 # publish to PyPI (requires token/auth configured)
 uv publish
+
+# commit and push release changes
+git add .
+git commit -m "chore(release): vX.Y.Z"
+git push
 ```
 
 
