@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - No unreleased changes yet
 
+## [2.2.1] - 2026-04-12
+
+### Fixed
+- Bumped version to 2.2.1 after PyPI rejected re-upload of deleted 2.2.0 filenames
+
+## [2.2.0] - 2026-04-12
+
+### Added
+- GitHub Actions CI workflow running `uv sync --all-groups`, `uv run pytest`, and `uv run mypy facebook_ads_reports` on push/PR to `main`
+- GitHub Actions release workflow triggered by published GitHub Releases to automate version/changelog updates, package build, and PyPI publish
+
+### Changed
+- Bumped package version to 2.2.0 to include CI/CD release automation and docs pipeline migration under `docs/`
+- Updated release documentation to use `docs/RELEASE_PIPELINE_SKILL.md` and `docs/CHANGELOG.md` as the canonical release docs
+
 ## [2.1.2] - 2026-04-10
 
 ### Added

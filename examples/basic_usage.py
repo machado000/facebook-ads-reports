@@ -67,8 +67,12 @@ def main() -> None:
             # Extract the report data
             logging.info(f"Extracting '{report_model['report_name']}' for account '{AD_ACCOUNT_ID}'")
 
-            report = meta_api_client.get_report(AD_ACCOUNT_ID, report_model, start_date, end_date,
-                                                flatten=True, limit=100)
+            report = meta_api_client.get_report(AD_ACCOUNT_ID,
+                                                report_model,
+                                                start_date,
+                                                end_date,
+                                                flatten=True,
+                                                limit=100)
 
             # Create output folder if missing so every model run can emit a file.
             output_dir = create_output_directory("reports_output")

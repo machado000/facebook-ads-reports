@@ -61,7 +61,7 @@ class MetaAdsReport:
     @retry_on_api_error()
     def get_report(self, ad_account_id: str, report_model: Dict[str, Any],
                    start_date: date | None, end_date: date | None,
-                   flatten: bool = True, limit: int = 200) -> list[dict[str, Any]]:
+                   flatten: bool = False, limit: int = 200) -> list[dict[str, Any]]:
         """
         Retrieve a report from the Facebook Marketing API using a report model configuration.
 

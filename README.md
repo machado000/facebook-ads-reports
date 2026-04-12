@@ -143,17 +143,16 @@ uv sync --all-groups
 uv run pytest
 uv run mypy facebook_ads_reports
 
-# build wheel and sdist
+# local build check
 uv build
-
-# publish to PyPI (requires token/auth configured)
-uv publish
-
-# commit and push release changes
-git add .
-git commit -m "chore(release): vX.Y.Z"
-git push
 ```
+
+Release publishing is automated through GitHub Actions:
+
+- CI workflow: `.github/workflows/test.yml` runs tests and mypy on push/PR to `main`
+- Release workflow: `.github/workflows/release.yml` runs on published GitHub Releases (`vX.Y.Z`), updates `pyproject.toml` and `docs/CHANGELOG.md`, builds artifacts, and publishes to PyPI
+
+For release runbook details, see `docs/RELEASE_PIPELINE_SKILL.md`.
 
 
 ## License
