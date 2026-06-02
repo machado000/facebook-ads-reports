@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - No unreleased changes yet
 
+## [2.3.1] - 2026-06-02
+
+### Fixed
+- Included remaining v2.3.0 release updates for `client.py`, `models.py`, and `uv.lock`
+
+
 ## [2.3.0] - 2026-06-02
 
 ### Added
