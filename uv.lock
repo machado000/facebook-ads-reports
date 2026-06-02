@@ -111,7 +111,7 @@ wheels = [
 
 [[package]]
 name = "facebook-ads-reports"
-version = "2.3.1"
+version = "2.3.2"
 source = { editable = "." }
 dependencies = [
     { name = "python-dotenv" },
