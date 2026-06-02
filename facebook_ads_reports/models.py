@@ -76,7 +76,7 @@ class MetaAdsReportModel:
             "boosted_object_id",
         ],
         "params": {
-            "date_preset": "last_3d",
+            "date_preset": "maximum",
             "filtering": [],
             "sort": ["id"]
         },
@@ -106,7 +106,7 @@ class MetaAdsReportModel:
             "recommendations",
         ],
         "params": {
-            "date_preset": "last_3d",
+            "date_preset": "maximum",
             "filtering": [],
             "sort": ["created_time"]
         },
@@ -133,7 +133,7 @@ class MetaAdsReportModel:
             "recommendations",
         ],
         "params": {
-            "date_preset": "last_3d",
+            "date_preset": "maximum",
             "filtering": [],
             "sort": ["id"]
         },
@@ -160,7 +160,7 @@ class MetaAdsReportModel:
         ],
         "params": {
             "level": "ad",
-            "date_preset": "last_3d",
+            "date_preset": "maximum",
             "filtering": [],
             "sort": ["ad_id"]
         },

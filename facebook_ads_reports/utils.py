@@ -8,7 +8,7 @@ import logging
 import os
 import re
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
 from .exceptions import ConfigurationError, ValidationError
@@ -195,6 +195,54 @@ def get_month_date_pairs(start_date: date, end_date: date) -> list[tuple[date, d
             current_date = date(current_date.year, current_date.month + 1, 1)
 
     return month_periods
+
+
+def get_week_date_pairs(start_date: date, end_date: date) -> list[tuple[date, date]]:
+    """
+    Breaks a date range into weekly (start_date, end_date) pairs.
+    Weeks start on Sunday and end on Saturday.
+
+    Args:
+        start_date (date): The start date of the range.
+        end_date (date): The end date of the range.
+
+    Returns:
+        list[tuple[date, date]]: List of (start_date, end_date) tuples for each week in the range.
+    """
+    # Ensure input dates are date objects
+    if isinstance(start_date, datetime):
+        start_date = start_date.date()
+    if isinstance(end_date, datetime):
+        end_date = end_date.date()
+
+    if end_date < start_date:
+        raise ValueError("ERROR - Invalid dates: 'end_date' precedes 'start_date'")
+
+    # Initialize the list to store the week periods
+    week_periods = []
+
+    # Find the Sunday on or before start_date
+    # weekday() returns 0-6 (Mon-Sun), so Sunday is 6
+    # (weekday() + 1) % 7 gives days since last Sunday
+    days_since_sunday = (start_date.weekday() + 1) % 7
+    week_start = start_date - timedelta(days=days_since_sunday)
+
+    current_week_start = week_start
+    while current_week_start <= end_date:
+        # Calculate the Saturday for this week (6 days after Sunday)
+        week_end = current_week_start + timedelta(days=6)
+
+        # Adjust if week_end goes beyond end_date
+        week_end = min(week_end, end_date)
+
+        # Only add if week_start is not after end_date
+        if current_week_start <= end_date:
+            week_periods.append((max(current_week_start, start_date), week_end))
+
+        # Move to the next Sunday
+        current_week_start += timedelta(days=7)
+
+    return week_periods
 
 
 def get_unique_keys_from_response(response: list[dict[str, Any]]) -> list[str]:

@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- No unreleased changes yet
+- New utility function `get_week_date_pairs()` to break date ranges into weekly periods (Sunday-Saturday)
+- Enhanced README features list to highlight date range utility functions
 
 ## [2.3.1] - 2026-06-02
 

@@ -14,6 +14,7 @@ A Python ETL driver for Facebook Marketing API v25 data extraction and transform
 - **Multiple Report Types**: Pre-configured report models for common use cases
 - **Custom Reports**: Create custom report configurations
 - **Flexible Data Export**: Built-in CSV and JSON export utilities
+- **Date Range Utilities**: Helper functions to break date ranges into monthly or weekly periods
 - **Lightweight Architecture**: No pandas dependency for faster installations and smaller footprint
 - **Type Hints**: Full type hint support with strict mypy compliance for better IDE experience
 - **Data Processing Utilities**: Helper functions for data transformation and export
