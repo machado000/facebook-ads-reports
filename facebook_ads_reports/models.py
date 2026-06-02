@@ -76,7 +76,7 @@ class MetaAdsReportModel:
             "boosted_object_id",
         ],
         "params": {
-            "date_preset": "maximum",
+            "date_preset": "last_3d",
             "filtering": [],
             "sort": ["id"]
         },
@@ -106,7 +106,7 @@ class MetaAdsReportModel:
             "recommendations",
         ],
         "params": {
-            "date_preset": "maximum",
+            "date_preset": "last_3d",
             "filtering": [],
             "sort": ["created_time"]
         },
@@ -133,7 +133,7 @@ class MetaAdsReportModel:
             "recommendations",
         ],
         "params": {
-            "date_preset": "maximum",
+            "date_preset": "last_3d",
             "filtering": [],
             "sort": ["id"]
         },
@@ -160,7 +160,7 @@ class MetaAdsReportModel:
         ],
         "params": {
             "level": "ad",
-            "date_preset": "maximum",
+            "date_preset": "last_3d",
             "filtering": [],
             "sort": ["ad_id"]
         },
@@ -200,7 +200,7 @@ class MetaAdsReportModel:
         ],
         "params": {
             "level": "ad",
-            "date_preset": "last_30d",  # overwrited if start_date is passed
+            "date_preset": "last_3d",  # overwrited if start_date is passed
             "time_increment": 1,
             "action_breakdowns": ["action_type", "action_video_type"],
             "breakdowns": ["publisher_platform", "platform_position"],

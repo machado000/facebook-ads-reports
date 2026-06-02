@@ -30,7 +30,7 @@ logging.basicConfig(
 
 class MetaAdsReport:
     """
-    MetaAdsReport class for interacting with the Facebook Marketing API v23.0.
+    MetaAdsReport class for interacting with the Facebook Marketing API v25.0.
     """
 
     def __init__(self, credentials_dict: Dict[str, str]) -> None:
@@ -52,7 +52,7 @@ class MetaAdsReport:
 
         try:
             self.access_token = credentials_dict["access_token"]
-            self.api_version = "v23.0"
+            self.api_version = "v25.0"
             self.api_base_url = f"https://graph.facebook.com/{self.api_version}"
 
         except Exception as e:
