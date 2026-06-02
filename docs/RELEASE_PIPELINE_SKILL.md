@@ -8,6 +8,8 @@ This runbook describes the CI/CD release routine for this project using GitHub A
 - Changelog management in `docs/CHANGELOG.md`
 - Automated publish to PyPI from GitHub Releases
 
+Target release for this runbook: `v2.3.0` (minor release; API v25 and report model `date_preset` standardization)
+
 ## Workflow Files
 
 - `.github/workflows/test.yml`: quality gates on `push` and `pull_request` to `main`

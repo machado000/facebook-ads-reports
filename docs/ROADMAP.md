@@ -4,7 +4,7 @@ This document outlines planned improvements for the `facebook-ads-reports` packa
 
 ## Current Status
 
-**Version**: 2.1.0  
+**Version**: 2.3.0  
 **Status**: Production-ready and published  
 **Core Features**: Complete and maintained
 
@@ -79,7 +79,7 @@ Contributions are welcome. Open an issue to discuss a roadmap item before implem
 
 ---
 
-**Last Updated**: April 2026  
+**Last Updated**: June 2026  
 **Next Review**: July 2026
 
 Feedback is welcome in the issue tracker: https://github.com/machado000/facebook-ads-reports/issues
