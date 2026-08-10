@@ -23,8 +23,10 @@ from .utils import (
     create_output_directory,
     format_report_filename,
     get_month_date_pairs,
+    get_week_date_pairs,
     get_unique_keys_from_response,
     convert_keys_case,
+    sanitize_column_name,
     save_report_to_csv,
     save_report_to_json
 )
@@ -48,8 +50,10 @@ __all__ = [
     "create_output_directory",
     "format_report_filename",
     "get_month_date_pairs",
+    "get_week_date_pairs",
     "get_unique_keys_from_response",
     "convert_keys_case",
+    "sanitize_column_name",
     "save_report_to_csv",
     "save_report_to_json",
     # __init__

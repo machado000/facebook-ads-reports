@@ -329,6 +329,33 @@ def convert_keys_case(data: list[dict[str, Any]], case: str = "snake") -> list[d
     return converted_data
 
 
+# Meta `action_type` values are free-form and routinely contain characters that are not
+# valid identifiers, e.g. "offsite_conversion.fb_pixel_purchase". Flattened column names
+# are consumed as identifiers downstream (BigQuery columns, DataFrame attributes, Parquet
+# field names), so every character outside [0-9A-Za-z_] is folded to an underscore.
+_INVALID_COLUMN_CHARS = re.compile(r"[^0-9a-zA-Z_]")
+
+
+def sanitize_column_name(name: str) -> str:
+    """
+    Fold an arbitrary action type into a portable column identifier.
+
+    Used by the report flattener to name the columns hoisted out of `actions`,
+    `action_values` and the other action-list fields. Exposed publicly so that ETL
+    consumers can reproduce the exact column name a given action type maps to.
+
+    Args:
+        name (str): Raw column name, typically `{prefix}{action_type}`.
+
+    Returns:
+        str: The name with unsupported characters replaced by underscores, prefixed
+            with an underscore when it would otherwise start with a digit.
+    """
+    sanitized = _INVALID_COLUMN_CHARS.sub("_", name)
+
+    return f"_{sanitized}" if sanitized[:1].isdigit() else sanitized
+
+
 def save_report_to_csv(data: list[dict[str, Any]], filepath: str, sort_columns: bool = True) -> str:
     """
     Save report data to CSV file.

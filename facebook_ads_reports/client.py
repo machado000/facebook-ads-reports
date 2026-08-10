@@ -12,20 +12,61 @@ import requests
 import socket
 import unicodedata
 
-from datetime import date, datetime
-from typing import Any, Dict, Literal
-from .exceptions import DataProcessingError, ValidationError
+from datetime import date, datetime, timezone
+from requests.exceptions import RequestException
+from typing import Any, Dict, Literal, NoReturn
+from .exceptions import APIError, AuthenticationError, DataProcessingError, ValidationError
 from .retry import retry_on_api_error
-from .utils import validate_account_id, convert_keys_case
+from .utils import validate_account_id, convert_keys_case, sanitize_column_name
 
 # Set timeout for all http connections
 TIMEOUT_IN_SEC = 60 * 3  # seconds timeout limit
 socket.setdefaulttimeout(TIMEOUT_IN_SEC)
 
+# Insights fields that return a list of {"action_type": ..., "value": ...} entries.
+# Each entry is hoisted into its own column named `{prefix}{action_type}`.
+#
+# `actions` stays unprefixed for backward compatibility; every other family carries a
+# prefix so that value-bearing metrics (revenue, ROAS, conversion values) do not
+# overwrite the action counts that share the same `action_type` key.
+ACTION_COLUMN_PREFIXES: dict[str, str] = {
+    "actions": "",
+    "action_values": "value_",
+    "conversions": "conversion_",
+    "conversion_values": "conversion_value_",
+    "converted_product_quantity": "converted_product_quantity_",
+    "converted_product_value": "converted_product_value_",
+    "purchase_roas": "roas_",
+    "website_purchase_roas": "website_roas_",
+    "cost_per_action_type": "cost_per_",
+}
+
+# Graph API error codes that indicate the token, not the request, is the problem.
+AUTH_ERROR_CODES = {102, 190, 200, 10, 2500}
+
+# Graph API error codes for throttling. These are transient: back off and retry.
+# 4 = app-level, 17 = user-level, 32 = page-level, 613 = custom rate limit,
+# 800xx = ads insights / ads management throttling.
+RATE_LIMIT_ERROR_CODES = {
+    4, 17, 32, 613,
+    80000, 80001, 80002, 80003, 80004, 80005, 80006, 80008, 80009, 80014,
+}
+
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(levelname)s - %(message)s'
 )
+
+
+def _parse_retry_after(header_value: str | None) -> float | None:
+    """Parse a Retry-After header expressed in seconds, ignoring HTTP-date form."""
+    if not header_value:
+        return None
+    try:
+        return float(header_value)
+    except ValueError:
+        return None
 
 
 class MetaAdsReport:
@@ -57,6 +98,117 @@ class MetaAdsReport:
 
         except Exception as e:
             raise KeyError("credentials_dict must contain 'access_token' key") from e
+
+        # Optional. When both are present, verify_token() authenticates the /debug_token
+        # call with an app access token, which is the reliable way to inspect a token
+        # the caller does not personally own (for example a Business Manager system user).
+        self.app_id = credentials_dict.get("app_id")
+        self.app_secret = credentials_dict.get("app_secret")
+
+    def verify_token(self, required_scopes: list[str] | None = None) -> dict[str, Any]:
+        """
+        Inspect the configured access token via the Graph API `/debug_token` endpoint.
+
+        Surfaces validity, token type, expiry, and granted scopes so that credential
+        problems fail fast with a clear message instead of surfacing as an opaque 401
+        in the middle of an extraction.
+
+        Args:
+            required_scopes (list[str] | None): Scopes that must be present. When given
+                and any are missing, AuthenticationError is raised.
+
+        Returns:
+            dict[str, Any]: Token metadata with these keys:
+                - is_valid (bool)
+                - type (str): e.g. 'USER', 'SYSTEM_USER'
+                - app_id (str | None), application (str | None), user_id (str | None)
+                - expires_at (datetime | None): None when the token never expires
+                - never_expires (bool): True for system user tokens
+                - data_access_expires_at (datetime | None)
+                - scopes (list[str]), granular_scopes (list[dict])
+                - missing_scopes (list[str]): empty unless required_scopes was given
+
+        Raises:
+            AuthenticationError: If the token is invalid, expired, the debug call fails,
+                or required scopes are missing.
+        """
+        # An app access token ('{app_id}|{app_secret}') can inspect any token issued for
+        # that app. Without app credentials, fall back to self-inspection, which only
+        # works when the token holder has a role on the app.
+        if self.app_id and self.app_secret:
+            inspector_token = f"{self.app_id}|{self.app_secret}"
+        else:
+            inspector_token = self.access_token
+            logging.debug("No app_id/app_secret in credentials; inspecting token with itself")
+
+        try:
+            response = requests.get(
+                f"https://graph.facebook.com/{self.api_version}/debug_token",
+                params={"input_token": self.access_token, "access_token": inspector_token},
+                timeout=30,
+            )
+        except RequestException as e:
+            raise AuthenticationError("Failed to reach the token debug endpoint", original_error=e) from e
+
+        payload = response.json() if response.content else {}
+
+        if response.status_code != 200:
+            error = payload.get("error", {})
+            raise AuthenticationError(
+                f"Token verification failed: {error.get('message', response.text)}",
+                status_code=response.status_code,
+                error_code=error.get("code"),
+                error_subcode=error.get("error_subcode"),
+            )
+
+        data: dict[str, Any] = payload.get("data", {})
+
+        if not data.get("is_valid"):
+            error = data.get("error", {})
+            raise AuthenticationError(
+                f"Access token is not valid: {error.get('message', 'no reason reported')}",
+                error_code=error.get("code"),
+                error_subcode=error.get("error_subcode"),
+            )
+
+        # /debug_token reports 0 (or omits the key) for tokens that never expire.
+        def _as_datetime(timestamp: Any) -> datetime | None:
+            if not timestamp:
+                return None
+            return datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+
+        expires_at = _as_datetime(data.get("expires_at"))
+
+        if expires_at is not None and expires_at <= datetime.now(tz=timezone.utc):
+            raise AuthenticationError(f"Access token expired at {expires_at.isoformat()}")
+
+        scopes: list[str] = data.get("scopes", [])
+        missing_scopes = [s for s in (required_scopes or []) if s not in scopes]
+
+        if missing_scopes:
+            raise AuthenticationError(
+                f"Access token is missing required scopes: {', '.join(missing_scopes)}",
+                granted_scopes=scopes,
+            )
+
+        result = {
+            "is_valid": True,
+            "type": data.get("type"),
+            "app_id": data.get("app_id"),
+            "application": data.get("application"),
+            "user_id": data.get("user_id"),
+            "expires_at": expires_at,
+            "never_expires": expires_at is None,
+            "data_access_expires_at": _as_datetime(data.get("data_access_expires_at")),
+            "scopes": scopes,
+            "granular_scopes": data.get("granular_scopes", []),
+            "missing_scopes": missing_scopes,
+        }
+
+        expiry_note = "never expires" if result["never_expires"] else f"expires {expires_at.isoformat()}"  # type: ignore[union-attr]  # noqa: E501
+        logging.info(f"Token OK - type={result['type']}, {expiry_note}, scopes={', '.join(scopes) or 'none'}")
+
+        return result
 
     @retry_on_api_error()
     def get_report(self, ad_account_id: str, report_model: Dict[str, Any],
@@ -183,13 +335,13 @@ class MetaAdsReport:
                 logging.debug(f"Remaining quota: {quota_info}")
 
             else:
-                raise Exception(
-                    f"""API request failed with Error code: {response.status_code}, header: {response.headers}, body: {response.text}""")  # noqa
+                self._raise_for_error_response(response, report_name)
 
         response_data_snake_case = convert_keys_case(response_data, case="snake")
 
         if flatten:
-            flattened_response = self._flatten_facebook_ads_response(response_data_snake_case)
+            flattened_response = self._flatten_facebook_ads_response(
+                response_data_snake_case, report_model.get("action_types"))
         else:
             flattened_response = response_data
 
@@ -197,6 +349,53 @@ class MetaAdsReport:
 
         logging.info(f"Finished fetching full report with {len(cleaned_response)} rows")
         return cleaned_response
+
+    def _raise_for_error_response(self, response: requests.Response, report_name: str) -> NoReturn:
+        """
+        Translate a non-200 Graph API response into a typed exception.
+
+        Classifies the failure so that `@retry_on_api_error` can decide whether to back
+        off and retry. Rate limits and transient server errors become retryable APIError
+        instances; token problems become AuthenticationError, which is never retried.
+
+        Args:
+            response (requests.Response): The failed response.
+            report_name (str): Report being extracted, for error context.
+
+        Raises:
+            AuthenticationError: For token/permission failures.
+            APIError: For every other non-200 response.
+        """
+        try:
+            error = response.json().get("error", {})
+        except ValueError:
+            error = {}
+
+        message = error.get("message") or response.text[:200] or "no error message returned"
+        error_code = error.get("code")
+        error_subcode = error.get("error_subcode")
+
+        # Detail travels in structured context instead of a multi-kilobyte header dump.
+        context: dict[str, Any] = {
+            "report_name": report_name,
+            "status_code": response.status_code,
+            "error_code": error_code,
+            "error_subcode": error_subcode,
+            "error_type": error.get("type"),
+            "is_transient": bool(error.get("is_transient", False)),
+            "fbtrace_id": error.get("fbtrace_id"),
+            "is_rate_limit": error_code in RATE_LIMIT_ERROR_CODES or response.status_code == 429,
+            "retry_after": _parse_retry_after(response.headers.get("Retry-After")),
+            "throttle": response.headers.get("x-fb-ads-insights-throttle"),
+        }
+
+        if error_code in AUTH_ERROR_CODES or response.status_code == 401:
+            raise AuthenticationError(
+                f"Facebook Marketing API rejected the access token: {message}", **context)
+
+        raise APIError(
+            f"Facebook Marketing API request failed ({response.status_code}) "
+            f"for {report_name}: {message}", **context)
 
     def _clean_text_encoding(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
@@ -256,12 +455,39 @@ class MetaAdsReport:
             logging.warning(f"Character encoding cleanup failed: {e}")
             return data
 
-    def _flatten_action_list(self, list_of_dicts: list[dict[str, Any]]) -> dict[str, Any]:
+    def _flatten_action_list(self, list_of_dicts: list[dict[str, Any]],
+                             prefix: str = "",
+                             allowed_action_types: set[str] | None = None) -> dict[str, Any]:
+        """
+        Flatten a list of {"action_type": ..., "value": ...} entries into columns.
 
+        Args:
+            list_of_dicts: The raw action list from the API.
+            prefix: Column-name prefix identifying the source field. See
+                ACTION_COLUMN_PREFIXES.
+            allowed_action_types: When given, only these raw action types are kept.
+                Matching happens before the prefix is applied, so a single entry
+                controls the count, value and ROAS columns derived from it.
+
+        Returns:
+            dict[str, Any]: Mapping of the sanitized `{prefix}{action_type}` to its value.
+        """
         if not isinstance(list_of_dicts, list):
             return {}
 
-        flattened_dict = {item["action_type"]: item["value"] for item in list_of_dicts}
+        flattened_dict: dict[str, Any] = {}
+
+        for item in list_of_dicts:
+            if not isinstance(item, dict) or "action_type" not in item:
+                continue
+
+            action_type = item["action_type"]
+
+            if allowed_action_types is not None and action_type not in allowed_action_types:
+                continue
+
+            column_name = sanitize_column_name(f"{prefix}{action_type}")
+            flattened_dict[column_name] = item.get("value")
 
         return flattened_dict
 
@@ -306,12 +532,15 @@ class MetaAdsReport:
             return values[0]
         return values
 
-    def _flatten_facebook_ads_response(self, response: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _flatten_facebook_ads_response(self, response: list[dict[str, Any]],
+                                       action_types: list[str] | None = None) -> list[dict[str, Any]]:
         """
         Flatten nested fields from the Facebook Marketing API `data` payload.
 
         Parameters:
         - response: The Facebook Marketing API `data` list of dictionaries.
+        - action_types: Optional allow-list of raw action types. When empty or omitted,
+          every action type returned by the API is kept.
 
         Returns:
         - list[dict[str, Any]]: Flattened report rows.
@@ -331,10 +560,9 @@ class MetaAdsReport:
             # Create a copy to avoid modifying the original
             flattened_response = []
 
-            action_columns = [
-                "actions", "conversions", "conversion_values",
-                "converted_product_quantity", "converted_product_value",
-            ]
+            # An empty list means "no filtering", which keeps the parameter optional for
+            # every report model that does not declare one.
+            allowed_action_types = set(action_types) if action_types else None
 
             video_actions_columns = [
                 "video_play_actions", "video_p25_watched_actions", "video_p50_watched_actions",
@@ -378,12 +606,13 @@ class MetaAdsReport:
             for row in response:
                 flattened_row = row.copy()
 
-                for column in action_columns:
+                for column, prefix in ACTION_COLUMN_PREFIXES.items():
                     if column in flattened_row:
-                        logging.debug(f"Flattening column '{column}'")
+                        logging.debug(f"Flattening column '{column}' with prefix '{prefix}'")
 
                         # Flatten the list of dicts to a single dict
-                        flattened_dict = self._flatten_action_list(flattened_row[column])
+                        flattened_dict = self._flatten_action_list(
+                            flattened_row[column], prefix, allowed_action_types)
 
                         # Remove the original column
                         del flattened_row[column]

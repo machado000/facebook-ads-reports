@@ -164,7 +164,6 @@ class MetaAdsReportModel:
             "filtering": [],
             "sort": ["ad_id"]
         },
-        "action_types": [],
         "table_name": "meta_ads_addimensions",
         "constraint_column": ["ad_id"],
     }
@@ -190,6 +189,9 @@ class MetaAdsReportModel:
             "reach",
             "frequency",
             "actions",
+            "action_values",
+            "conversion_values",
+            "purchase_roas",
             "video_play_actions",
             "video_p25_watched_actions",
             "video_p50_watched_actions",
@@ -207,24 +209,87 @@ class MetaAdsReportModel:
             "filtering": [],
             "sort": ["date_start", "ad_id"]
         },
-        # "action_types": [
-        #     "add_payment_info",
-        #     "add_to_cart",
-        #     "comment",
-        #     "complete_registration",
-        #     "initiate_checkout",
-        #     "landing_page_view",
-        #     "lead",
-        #     "link_click",
-        #     "page_engagement",
-        #     "post_engagement",
-        #     "post_reaction",
-        #     "post",
-        #     "purchase",
-        #     "view_content",
-        # ],
+        # Allow-list applied to every action-list field (`actions`, `action_values`,
+        # `purchase_roas`, ...) after the API responds. Filtering is on the raw
+        # `action_type`, so one entry controls the count, the value and the ROAS column
+        # it produces. An empty list or a missing key keeps every action type.
+        #
+        # Meta reports the same conversion under several overlapping scopes:
+        #   offsite_conversion.*  pixel/CAPI only, on the advertiser's own property
+        #   onsite_conversion.*   happened inside Facebook/Instagram/Messenger/WhatsApp
+        #   onsite_web_*, web_in_store_*, web_app_in_store_*  partial channel rollups
+        #   omni_*                deduplicated total across web, app, offline and Shops
+        # `omni_*` is the spine here: it is what Ads Manager reports and what delivery
+        # optimises toward. The narrower scopes stay commented out because they are
+        # subsets of it, identical row-for-row unless an app, offline uploads or Shops
+        # checkout are in play. Uncomment `offsite_conversion.*` to measure pixel
+        # coverage gaps as `omni_purchase - offsite_conversion.fb_pixel_purchase`.
+        "action_types": [
+            # conversions - omni spine
+            "omni_purchase",
+            "omni_add_to_cart",
+            "omni_initiated_checkout",
+            "omni_view_content",
+            "omni_search",
+            "omni_add_to_wishlist",
+            "add_payment_info",  # no omni_* variant is reported for this event
+            # traffic and engagement
+            "link_click",
+            "landing_page_view",
+            "page_engagement",
+            "post_engagement",
+            "post_reaction",
+            "post",
+            "comment",
+            "like",
+            "post_interaction_gross",
+            "post_interaction_net",
+            "video_view",
+            # "onsite_conversion.messaging_conversation_started_7d",
+
+            # -- pixel-only scope: subset of omni_*, enable to audit pixel coverage --
+            # "offsite_conversion.fb_pixel_purchase",
+            # "offsite_conversion.fb_pixel_add_to_cart",
+            # "offsite_conversion.fb_pixel_initiate_checkout",
+            # "offsite_conversion.fb_pixel_view_content",
+            # "offsite_conversion.fb_pixel_search",
+            # "offsite_conversion.fb_pixel_add_to_wishlist",
+            # "offsite_conversion.fb_pixel_add_payment_info",
+
+            # -- partial channel rollups: equal to omni_* without app/offline/Shops --
+            # "onsite_web_purchase",
+            # "onsite_web_app_purchase",
+            # "onsite_web_add_to_cart",
+            # "onsite_web_app_add_to_cart",
+            # "onsite_web_initiate_checkout",
+            # "onsite_web_view_content",
+            # "onsite_web_app_view_content",
+            # "web_in_store_purchase",
+            # "web_app_in_store_purchase",
+
+            # -- legacy bare aggregates: duplicate the omni_* entries above --
+            # "purchase",
+            # "add_to_cart",
+            # "initiate_checkout",
+            # "view_content",
+            # "search",
+            # "add_to_wishlist",
+            # "omni_landing_page_view",
+
+            # -- post-level engagement detail --
+            # "onsite_conversion.post_save",
+            # "onsite_conversion.post_unsave",
+            # "onsite_conversion.post_unlike",
+            # "onsite_conversion.post_net_like",
+            # "onsite_conversion.post_net_save",
+            # "onsite_conversion.post_net_comment",
+            # "onsite_conversion.total_messaging_connection",
+        ],
         "table_name": "meta_ads_adinsights",
         "date_column": "date_start",
+        "constraint_column": [
+            "account_id", "ad_id", "date_start", "publisher_platform", "platform_position",
+        ],
     }
 
     # Backward-compatible alias kept for existing integrations.

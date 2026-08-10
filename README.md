@@ -18,7 +18,10 @@ A Python ETL driver for Facebook Marketing API v25 data extraction and transform
 - **Lightweight Architecture**: No pandas dependency for faster installations and smaller footprint
 - **Type Hints**: Full type hint support with strict mypy compliance for better IDE experience
 - **Data Processing Utilities**: Helper functions for data transformation and export
+- **Token Verification**: `verify_token()` reports validity, type, expiry, and scopes via `/debug_token`
 - **Unicode-Safe Text Cleaning**: Response cleanup preserves accents and Unicode while removing null bytes and unsafe control characters
+- **Warehouse-Safe Column Names**: Flattened action columns are sanitized to valid identifiers, so `offsite_conversion.fb_pixel_purchase` lands as `offsite_conversion_fb_pixel_purchase`
+- **Conversion-Scope Filtering**: `ad_insights_report` ships an `action_types` allow-list keeping Meta's deduplicated `omni_*` metrics and dropping the overlapping attribution scopes that duplicate them
 
 ## Installation
 
@@ -50,6 +53,15 @@ Create a `secrets/fb_business_config.json` file with your Facebook Ads API crede
 }
 ```
 
+`access_token` is required. `app_id` and `app_secret` are optional but recommended --
+`verify_token()` uses them to authenticate its `/debug_token` call. `base_url` is ignored;
+the API version is pinned to v25.0 in the client.
+
+For unattended extraction, use a **Business Manager system user token** rather than a Graph
+API Explorer token: user tokens are invalidated by password changes and expire in ~60 days,
+and this package has no token-refresh logic. `verify_token()` reports `type: SYSTEM_USER`
+and `never_expires: True` for a correctly issued one.
+
 **Option B: Environment variable**
 
 Set the `FACEBOOK_ADS_CONFIG_JSON` environment variable with your credentials as JSON:
@@ -68,6 +80,9 @@ from facebook_ads_reports.utils import load_credentials, save_report_to_csv, sav
 # Load credentials
 credentials = load_credentials()
 client = MetaAdsReport(credentials_dict=credentials)
+
+# Fail fast on a bad token instead of hitting an opaque 401 mid-extraction
+client.verify_token(required_scopes=["ads_read"])
 
 # Configure report parameters
 ad_account_id = "act_1234567890"
@@ -91,18 +106,38 @@ save_report_to_csv(data, "ad_insights_report.csv")
 save_report_to_json(data, "ad_insights_report.json")
 ```
 
+With `flatten=True`, `ad_insights_report` expands each `action_type` into its own column.
+The `action_types` allow-list in the model caps which columns are possible -- 48 on a live
+extract, down from 102 unfiltered -- but a column still only appears when that action
+occurred in the window, so **absent is not zero** and loaders must tolerate missing keys.
+See [docs/REPORT_FIELDS.md](docs/REPORT_FIELDS.md#the-variable-schema-problem).
+
+Conversion columns use Meta's deduplicated `omni_*` family (`omni_purchase`,
+`value_omni_purchase`, `roas_omni_purchase`). The overlapping `offsite_conversion.*`,
+`onsite_web_*` and legacy bare scopes are commented out in `models.py` -- uncomment a block
+to restore them. See
+[docs/REPORT_FIELDS.md](docs/REPORT_FIELDS.md#the-conversion-scope-allow-list).
+
 
 ## Available Report Models
 
-- `MetaAdsReportModel.ad_accounts_report` - Ad account metadata available for the token
-- `MetaAdsReportModel.campaigns_report` - Campaign setup, objective, and budget fields
-- `MetaAdsReportModel.adsets_report` - Ad set configuration and targeting payloads
-- `MetaAdsReportModel.ad_summary_report` - Ad-level metadata and status
-- `MetaAdsReportModel.ad_dimensions_report` - Ad dimensions and aggregate context fields
-- `MetaAdsReportModel.ad_insights_report` - Ad metrics and actions over time
-- `MetaAdsReportModel.ad_performance_report` - Backward-compatible alias of `ad_insights_report`
+| Model | Returns | Grain (one row per) |
+| --- | --- | --- |
+| `ad_accounts_report` | Account metadata for every account the token can reach | ad account |
+| `campaigns_report` | Campaign setup, objective, budget | campaign |
+| `adsets_report` | Ad set config, targeting, learning stage | ad set |
+| `ad_summary_report` | Ad metadata, status, targeting | ad |
+| `ad_dimensions_report` | Ad attributes with no metrics | ad |
+| `ad_insights_report` | Metrics and actions over time | ad x day x publisher platform x platform position |
+| `ad_performance_report` | Backward-compatible alias of `ad_insights_report` | same as above |
+
+Only `ad_insights_report` uses `start_date` / `end_date`; the other models rely on the
+`date_preset` in their own params and ignore the dates you pass. `ad_accounts_report`
+ignores `ad_account_id` as well.
 
 You can also list models dynamically with `MetaAdsReportModel.list_available_reports()`.
+
+Full field lists, flattening behavior, and output schemas: [docs/REPORT_FIELDS.md](docs/REPORT_FIELDS.md).
 
 ## Custom Reports
 
@@ -117,8 +152,9 @@ custom_report = create_custom_report(
     from_table="ad_insights"
 )
 
-# This helper is intended for custom ETL metadata flows.
-# For API extraction with get_report(), use a model that contains endpoint/fields/params.
+# This helper is intended for custom ETL metadata flows and CANNOT be passed to
+# get_report() -- it has no endpoint/fields/params. To define a real custom extraction,
+# build a dict in the same shape as the built-in models. See docs/REPORT_FIELDS.md.
 ```
 
 ## Examples
@@ -148,14 +184,17 @@ uv run mypy facebook_ads_reports
 uv build
 ```
 
-Release publishing is automated through GitHub Actions:
+Note: there is no `tests/` directory yet, so `pytest` collects nothing (exit code 5).
+`mypy` is the effective quality gate.
 
-- CI workflow: `.github/workflows/test.yml` runs tests and mypy on push/PR to `main`
-- Release workflow: `.github/workflows/release.yml` runs on published GitHub Releases (`vX.Y.Z`), updates `pyproject.toml` and `docs/CHANGELOG.md`, builds artifacts, and publishes to PyPI
+Publishing is automated through `.github/workflows/release.yml`, which runs on every push
+to `main`: a Python 3.11-3.14 test matrix, then a build-and-publish job that skips PyPI if
+the version in `pyproject.toml` already exists. In practice, **releasing is a version bump
+merged to `main`**.
 
-- Release note: this repository is prepared for the `2.3.0` minor release that updates the Facebook Marketing API to v25 and standardizes report `date_preset` values to `last_3d`.
-
-For release runbook details, see `docs/RELEASE_PIPELINE_SKILL.md`.
+For internals and known behaviors, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For the release runbook, see [docs/RELEASE_PIPELINE_SKILL.md](docs/RELEASE_PIPELINE_SKILL.md)
+(note: it documents a release-triggered design that does not match the current workflow).
 
 
 ## License
@@ -165,7 +204,9 @@ GPL License. See [LICENSE](LICENSE) file for details.
 
 ## Support
 
-- [Documentation](https://github.com/machado000/facebook-ads-reports#readme)
+- [Architecture & internals](docs/ARCHITECTURE.md)
+- [Report field reference](docs/REPORT_FIELDS.md)
+- [Changelog](docs/CHANGELOG.md) | [Roadmap](docs/ROADMAP.md)
 - [Issues](https://github.com/machado000/facebook-ads-reports/issues)
 - [Examples](examples/)
 

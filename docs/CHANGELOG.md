@@ -5,10 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.4.0] - 2026-08-10
 
 ### Added
-- No unreleased changes yet
+- `sanitize_column_name()` in `utils.py`, re-exported from the package root. Folds any character outside `[0-9A-Za-z_]` in a flattened column name to an underscore, and prefixes a leading digit. Exposed publicly so ETL consumers can reproduce the exact column name a given `action_type` maps to
+- `ad_insights_report` declares an `action_types` allow-list that the flattener now honors. Filtering is on the raw `action_type`, before the prefix is applied, so one entry controls the count, value and ROAS columns derived from it. An empty list or a missing key keeps every action type, so the other five report models are unaffected
+- `ad_insights_report` now requests `action_values`, `conversion_values`, and `purchase_roas`, making conversion revenue and ROAS available in the extract
+- `ad_insights_report` declares `constraint_column: ["account_id", "ad_id", "date_start", "publisher_platform", "platform_position"]`, the composite key implied by `time_increment: 1` and the `publisher_platform` / `platform_position` breakdowns
+- `ACTION_COLUMN_PREFIXES` in `client.py` maps each action-shaped insights field to its output column prefix
+- `MetaAdsReport.verify_token()` inspects the configured token via `/debug_token`, returning validity, type, expiry, and scopes, and raising `AuthenticationError` on an invalid, expired, or under-scoped token
+- `MetaAdsReport` now reads the optional `app_id` / `app_secret` credentials, used to authenticate the `/debug_token` call
+- `docs/ARCHITECTURE.md` and `docs/REPORT_FIELDS.md` documenting the request pipeline, flattening rules, and per-model field catalog
+
+### Changed
+- **Flattened action column names are now sanitized.** `offsite_conversion.fb_pixel_purchase` becomes `offsite_conversion_fb_pixel_purchase`. Dots are not valid identifiers in BigQuery, Parquet, or pandas attribute access, and previously reached the output intact for callers to fix downstream. Names that are already valid identifiers are untouched, so column names do not churn between runs. **Breaking for consumers reading CSV/JSON output by the dotted names.**
+- **`ad_insights_report` now returns `omni_*` conversion columns by default.** The shipped `action_types` allow-list keeps the `omni_*` family — Meta's deduplicated cross-channel total — and excludes the `offsite_conversion.*`, `onsite_web_*`, `web_in_store_*` and legacy bare aggregates, which are overlapping attribution scopes of the same conversions. On a single-conversion-surface account these are identical row-for-row; a live 650-row extract collapsed from 102 columns to 48. `purchase` / `value_purchase` are now `omni_purchase` / `value_omni_purchase`. Re-enable any commented block in `models.py` to restore the previous columns. **Breaking for consumers of the excluded columns.**
+- Action-list flattening now namespaces columns by source field. `actions` remains unprefixed for backward compatibility; `action_values` writes `value_*`, `conversions` writes `conversion_*`, `conversion_values` writes `conversion_value_*`, and `purchase_roas` writes `roas_*`. Previously all families merged into bare `action_type` columns and overwrote one another.
+
+### Fixed
+- **Retries now apply to API error responses.** `requests` does not raise on 4xx/5xx, so `get_report()`'s bare `Exception` fell through to the retry decorator's generic `except Exception` and was re-raised without retrying — HTTP 429/500-504 and transient rate limits (`code: 4`) were never retried despite `_is_retryable_error()` being written for them. Non-200 responses now raise typed `APIError` / `AuthenticationError`, which the decorator classifies and retries.
+- Rate-limit errors use a 60s delay floor (`rate_limit_delay`) instead of ~1s exponential backoff, and a `Retry-After` header takes precedence over the backoff curve
+- Token failures raise `AuthenticationError` and skip retries entirely instead of consuming the full attempt budget
+- API error messages are ~150 characters with detail in structured `context`, replacing a ~4KB dump of the raw response headers
+- `_flatten_action_list()` skips malformed entries (non-dicts, or entries with no `action_type`) instead of raising `KeyError`, and tolerates a missing `value`
+
+### Removed
+- `action_types: []` from `ad_dimensions_report`, which was declared but never read. The key is now live config, honored only where a model declares entries
 
 ## [2.3.2] - 2026-06-02
 
