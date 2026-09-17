@@ -3,6 +3,7 @@ Facebook Marketing API report models module.
 
 This module contains pre-configured report models for different types of Facebook Marketing API reports.
 """
+import copy
 from typing import Any, Optional
 
 
@@ -16,6 +17,7 @@ class MetaAdsReportModel:
     - adsets_report
     - ad_summary_report
     - ad_dimensions_report
+    - ad_images_report
     - ad_insights_report
     - ad_performance_report (compatibility alias)
     """
@@ -93,6 +95,11 @@ class MetaAdsReportModel:
             "id",
             "name",
             "status",
+            # `status` only means "not archived": an ACTIVE ad set inside a paused campaign
+            # still reports ACTIVE. `effective_status` resolves the parent chain and is what
+            # reflects actual delivery. `campaigns_report` and `ad_summary_report` already
+            # requested both; ad sets were the gap.
+            "effective_status",
             "billing_event",
             "daily_budget",
             "budget_remaining",
@@ -292,26 +299,70 @@ class MetaAdsReportModel:
         ],
     }
 
+    ad_images_report = {
+        "report_name": "ad_images_report",
+        "endpoint": "adimages",
+        "fields": [
+            "id",
+            "account_id",
+            "hash",
+            "name",
+            # The only PERMANENT image URL the API offers. `url` here — and `image_url` on
+            # AdCreative — point at the CDN and expire: they carry an `oe=` parameter, the
+            # expiry as a hex Unix timestamp, roughly 36 hours out. Meta's own AdImage docs
+            # describe `url` as "a temporary URL ... Do not use this URL in ad creative
+            # creation" and `permalink_url` as "a permanent URL of the image".
+            #
+            # Without this report there is no way to display a creative after its CDN link
+            # lapses, short of downloading and archiving every image.
+            "permalink_url",
+            "url",
+            "width",
+            "height",
+            "original_width",
+            "original_height",
+            "status",
+            "created_time",
+            "updated_time",
+        ],
+        "params": {
+            "filtering": [],
+            "sort": ["created_time"],
+        },
+        "table_name": "meta_ads_adimages",
+        # `hash` is unique per ad account, not globally.
+        "constraint_column": ["account_id", "hash"],
+    }
+
     # Backward-compatible alias kept for existing integrations.
     ad_performance_report = ad_insights_report
 
     @classmethod
     def get_all_reports(cls) -> dict[str, dict[str, Any]]:
         """
-        Get all available report models.
+        Get all available report models, as deep copies.
+
+        The returned models are independent of the class attributes, so a caller may
+        append to `fields`, narrow `action_types`, or adjust `params` without affecting
+        any later lookup. Returning the class attributes directly meant one consumer
+        extending a model silently changed it for every other consumer in the process,
+        for the lifetime of the interpreter.
+
+        Read `cls.<report>_report` directly if you deliberately want the shared object.
 
         Returns:
             dict[str, dict[str, Any]]: Dictionary of all report models
         """
-        return {
+        return copy.deepcopy({
             "ad_accounts_report": cls.ad_accounts_report,
             "campaigns_report": cls.campaigns_report,
             "adsets_report": cls.adsets_report,
             "ad_summary_report": cls.ad_summary_report,
             'ad_dimensions_report': cls.ad_dimensions_report,
+            "ad_images_report": cls.ad_images_report,
             'ad_insights_report': cls.ad_insights_report,
             'ad_performance_report': cls.ad_performance_report,
-        }
+        })
 
     @classmethod
     def get_report_by_name(cls, report_name: str) -> Optional[dict[str, Any]]:
@@ -322,7 +373,8 @@ class MetaAdsReportModel:
             report_name (str): The name of the report model
 
         Returns:
-            Optional[dict[str, Any]]: The report model if found, None otherwise
+            Optional[dict[str, Any]]: A deep copy of the report model if found, None
+            otherwise. Safe to mutate — see `get_all_reports()`.
         """
         all_reports = cls.get_all_reports()
         return all_reports.get(report_name)
