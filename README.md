@@ -128,12 +128,13 @@ to restore them. See
 | `adsets_report` | Ad set config, targeting, learning stage | ad set |
 | `ad_summary_report` | Ad metadata, status, targeting | ad |
 | `ad_dimensions_report` | Ad attributes with no metrics | ad |
+| `ad_images_report` | Image assets, including the only permanent creative URL | image asset |
 | `ad_insights_report` | Metrics and actions over time | ad x day x publisher platform x platform position |
 | `ad_performance_report` | Backward-compatible alias of `ad_insights_report` | same as above |
 
 Only `ad_insights_report` uses `start_date` / `end_date`; the other models rely on the
 `date_preset` in their own params and ignore the dates you pass. `ad_accounts_report`
-ignores `ad_account_id` as well.
+ignores `ad_account_id` as well, and `ad_images_report` declares no `date_preset` at all.
 
 You can also list models dynamically with `MetaAdsReportModel.list_available_reports()`.
 

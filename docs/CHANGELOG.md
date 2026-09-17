@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-09-17
+
+### Added
+- `ad_images_report`, hitting the `adimages` edge — one row per image asset in the ad account. It is the only model that exposes `permalink_url`, the sole permanent image URL in the Marketing API; `url` here, like `image_url` / `thumbnail_url` on AdCreative, is a CDN link carrying an `oe=` expiry roughly 36 hours out. Join to ads on the creative's `image_hash` == `hash`, scoped to `account_id`, which is also the declared `constraint_column`. Coverage is partial by nature: video and carousel creatives carry no `image_hash`
+- `effective_status` on `adsets_report`. `status` only means "not archived" — an ad set marked `ACTIVE` inside a paused campaign still reports `ACTIVE`, so filtering on it overstates the live operation and hides disapproved delivery. `campaigns_report` and `ad_summary_report` already requested both fields; ad sets were the gap
+
+### Fixed
+- `get_all_reports()` and `get_report_by_name()` return deep copies instead of references to the class-level dicts. A consumer appending to `fields` previously mutated the shipped model for every later lookup in the process, silently and for the lifetime of the interpreter. Read `MetaAdsReportModel.<report>_report` directly to get the shared object
+
 ## [2.4.0] - 2026-08-10
 
 ### Added

@@ -16,8 +16,9 @@ Mechanics behind the transformations are in [ARCHITECTURE.md](ARCHITECTURE.md).
 | --- | --- | --- | --- | --- |
 | `ad_accounts_report` | `adaccounts` | ad account visible to the token | 18 | 18 |
 | `campaigns_report` | `campaigns` | campaign | 19 | 17 |
-| `adsets_report` | `adsets` | ad set | 16 | 41-42 |
+| `adsets_report` | `adsets` | ad set | 17 | 42-43 |
 | `ad_summary_report` | `ads` | ad | 13 | 36 |
+| `ad_images_report` | `adimages` | image asset in the ad account | 13 | 13 |
 | `ad_dimensions_report` | `insights` | ad | 12 | 14 |
 | `ad_insights_report` | `insights` | ad × day × publisher platform × platform position | 27 | ~48, varies |
 
@@ -57,9 +58,17 @@ missing keys.
 
 ### `adsets_report` — `date_preset: maximum`
 
-Requested: `account_id`, `campaign_id`, `id`, `name`, `status`, `billing_event`,
-`daily_budget`, `budget_remaining`, `lifetime_budget`, `start_time`, `end_time`,
-`created_time`, `updated_time`, `targeting`, `learning_stage_info`, `recommendations`
+Requested: `account_id`, `campaign_id`, `id`, `name`, `status`, `effective_status`,
+`billing_event`, `daily_budget`, `budget_remaining`, `lifetime_budget`, `start_time`,
+`end_time`, `created_time`, `updated_time`, `targeting`, `learning_stage_info`,
+`recommendations`
+
+**`status` is not delivery.** It only means "not archived" — an ad set marked `ACTIVE`
+inside a paused campaign still reports `ACTIVE`. `effective_status` resolves the parent
+chain and is the field that reflects whether the ad set is actually delivering. Filtering
+reports on `status` overstates the live operation, sometimes by several times over.
+`campaigns_report` and `ad_summary_report` already requested both fields; ad sets were the
+gap.
 
 `targeting` and `learning_stage_info` are objects that flattening expands, which is why 16
 requested fields become 41 columns:
@@ -87,6 +96,45 @@ Same `targeting` expansion as ad sets (13 → 36 columns). Note the sample extra
 `name` collision issue but does carry ad-level `targeting` inherited from the ad set.
 
 Metadata: `meta_ads_adsummary`, keyed on `id`.
+
+### `ad_images_report` — no `date_preset`
+
+Requested: `id`, `account_id`, `hash`, `name`, `permalink_url`, `url`, `width`, `height`,
+`original_width`, `original_height`, `status`, `created_time`, `updated_time`
+
+One row per image asset uploaded to the ad account. `id` is `<account_id>:<hash>`; `hash`
+is unique per account, not globally, hence `constraint_column: ["account_id", "hash"]`.
+
+**This is the only source of a permanent creative URL.** Two of the fields are URLs and
+they behave differently:
+
+| Field | Lifetime |
+| --- | --- |
+| `permalink_url` | Permanent. `facebook.com/ads/image/?d=<token>`, no expiry parameter |
+| `url` | Temporary. CDN link carrying `oe=<hex Unix timestamp>`, roughly 36 hours out |
+
+Meta's AdImage reference calls `url` "a temporary URL ... **Do not use this URL in ad
+creative creation**" and `permalink_url` "a permanent URL of the image". The same expiry
+applies to `image_url` and `thumbnail_url` on AdCreative — requesting the creative alone
+gives you links that die within days.
+
+To attach an image to an ad, join on the creative's `image_hash`:
+
+```
+ads.creative.image_hash  ==  ad_images_report.hash   (within the same account_id)
+```
+
+`image_hash` is not in `ad_summary_report` by default; request it through a nested
+expansion, e.g. `creative{id,image_hash,object_type}`.
+
+**Not every ad has one.** Video and carousel creatives carry no `image_hash`, and an ad
+whose source post was deleted reports `object_type: POST_DELETED` with nothing to resolve.
+On a live 7,309-ad account, 1,794 ads had an `image_hash` and 1,788 of those resolved to a
+`permalink_url` — the six misses were all deleted posts.
+
+There is no equivalent for video: `/advideos` exposes a `permalink_url`, but it is a
+relative link to the video's page on Facebook rather than a media file, and the `picture`
+thumbnail still expires.
 
 ## Insights Models
 
