@@ -13,9 +13,10 @@ import socket
 import time
 import unicodedata
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from requests.exceptions import RequestException
 from typing import Any, Dict, Literal, NoReturn
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .exceptions import APIError, AuthenticationError, DataProcessingError, ValidationError
 from .retry import retry_on_api_error
 from .utils import validate_account_id, validate_pixel_id, convert_keys_case, sanitize_column_name
@@ -119,6 +120,9 @@ class MetaAdsReport:
         # the caller does not personally own (for example a Business Manager system user).
         self.app_id = credentials_dict.get("app_id")
         self.app_secret = credentials_dict.get("app_secret")
+
+        # pixel_id -> IANA time zone name of the pixel's owner, resolved once per instance.
+        self._pixel_timezones: dict[str, str] = {}
 
     def verify_token(self, required_scopes: list[str] | None = None) -> dict[str, Any]:
         """
@@ -368,7 +372,8 @@ class MetaAdsReport:
     @retry_on_api_error()
     def get_pixel_stats(self, pixel_id: str, start_date: date | datetime | str,
                         end_date: date | datetime | str, aggregation: str = "event",
-                        event: str | None = None) -> list[dict[str, Any]]:
+                        event: str | None = None,
+                        timezone: str | None = None) -> list[dict[str, Any]]:
         """
         Retrieve raw event counts for a pixel (dataset) from the `/{pixel_id}/stats` edge.
 
@@ -388,17 +393,25 @@ class MetaAdsReport:
                 unless `event` is also given; see `get_pixel_event_hosts()`.
             event (str | None): Restrict the counts to one event name. Works with `host`
                 and `url`, which is how counts are crossed by event.
+            timezone (str | None): IANA time zone (for example `America/Sao_Paulo`) in which
+                `start_date` and `end_date` are calendar days. None resolves the time zone of
+                the pixel's owner ad account, which is the same rule `get_report()` relies on
+                for Insights: dates are days in the asset's own time zone. The API reads a
+                date-only `start_time` as UTC, so the window is sent as local midnight with
+                its UTC offset.
 
         Returns:
             list[dict[str, Any]]: One row per (hour bucket, value) with keys `pixel_id`,
                 `start_time`, `date`, `hour`, `aggregation`, `value`, `count` and, when
                 `event` was given, `event`. Buckets are hourly and empty hours are omitted.
                 `start_time` is the API's own string, which carries the UTC offset of the
-                pixel owner's time zone (for example `2026-10-01T00:00:00-0300`); `date`
-                and `hour` are read from it without conversion, so they are local time.
+                window's time zone (for example `2026-10-01T00:00:00-0300`); `date` and
+                `hour` are read from it without conversion, so they are local to the same
+                time zone the dates were given in.
 
         Raises:
-            ValidationError: For a malformed pixel ID, bad dates or an empty aggregation.
+            ValidationError: For a malformed pixel ID, bad dates, an empty aggregation, or a
+                time zone that is unknown or cannot be resolved from the pixel.
             AuthenticationError: For token failures (never retried).
             APIError: For every other failed response. Permission failures on this edge
                 arrive as `(#100) Permission Denied` or `Missing Permission` and mean the
@@ -412,10 +425,11 @@ class MetaAdsReport:
         if not aggregation or not isinstance(aggregation, str):
             raise ValidationError("aggregation must be a non-empty string")
 
+        tz = self._resolve_pixel_timezone(pixel_id, timezone)
         params: dict[str, Any] = {
             "aggregation": aggregation,
-            "start_time": start.isoformat(),
-            "end_time": (end + timedelta(days=1)).isoformat(),
+            "start_time": self._local_midnight(start, tz),
+            "end_time": self._local_midnight(end + timedelta(days=1), tz),
         }
         if event:
             params["event"] = event
@@ -425,7 +439,7 @@ class MetaAdsReport:
               "[ Request parameters ]",
               f"Pixel_id: {pixel_id}",
               f"Aggregation: {aggregation}" + (f" | Event: {event}" if event else ""),
-              f"Date range: from {start} to {end}\n",
+              f"Date range: from {start} to {end} ({tz})\n",
               sep="\n")
 
         headers = {'Authorization': f'Bearer {self.access_token}'}
@@ -471,7 +485,8 @@ class MetaAdsReport:
 
     def get_pixel_event_hosts(self, pixel_id: str, start_date: date | datetime | str,
                               end_date: date | datetime | str, events: list[str] | None = None,
-                              sleep_seconds: float = 0.0) -> list[dict[str, Any]]:
+                              sleep_seconds: float = 0.0,
+                              timezone: str | None = None) -> list[dict[str, Any]]:
         """
         Count pixel events by hostname, crossing the `event` and `host` aggregations.
 
@@ -486,6 +501,7 @@ class MetaAdsReport:
             events (list[str] | None): Event names to query. None discovers every event
                 the pixel received in the window.
             sleep_seconds (float): Pause between requests, to respect rate limits.
+            timezone (str | None): IANA time zone of the date window; see `get_pixel_stats()`.
 
         Returns:
             list[dict[str, Any]]: One row per (hour bucket, event, host) with keys
@@ -493,7 +509,8 @@ class MetaAdsReport:
                 Same time zone semantics as `get_pixel_stats()`.
         """
         if events is None:
-            event_rows = self.get_pixel_stats(pixel_id, start_date, end_date, aggregation="event")
+            event_rows = self.get_pixel_stats(pixel_id, start_date, end_date, aggregation="event",
+                                              timezone=timezone)
             events = sorted({str(r["value"]) for r in event_rows if r["value"]})
 
         rows: list[dict[str, Any]] = []
@@ -501,7 +518,8 @@ class MetaAdsReport:
             if index and sleep_seconds:
                 time.sleep(sleep_seconds)
             for r in self.get_pixel_stats(pixel_id, start_date, end_date,
-                                          aggregation="host", event=event_name):
+                                          aggregation="host", event=event_name,
+                                          timezone=timezone):
                 rows.append({
                     "pixel_id": r["pixel_id"],
                     "start_time": r["start_time"],
@@ -513,6 +531,40 @@ class MetaAdsReport:
                 })
 
         return rows
+
+    def _resolve_pixel_timezone(self, pixel_id: str, timezone: str | None) -> ZoneInfo:
+        """
+        Return the time zone in which a pixel's date windows are expressed.
+
+        An explicit `timezone` wins. Otherwise the pixel's owner ad account is read once and
+        cached on the instance.
+
+        Raises:
+            ValidationError: If the name is not an IANA zone, or the pixel exposes no owner
+                ad account time zone (pass `timezone` explicitly in that case).
+        """
+        name = timezone or self._pixel_timezones.get(pixel_id)
+        if not name:
+            response = requests.get(f"{self.api_base_url}/{pixel_id}",
+                                    headers={'Authorization': f'Bearer {self.access_token}'},
+                                    params={"fields": "owner_ad_account{timezone_name}"})
+            if response.status_code != 200:
+                self._raise_for_error_response(response, "pixel_timezone")
+            name = (response.json().get("owner_ad_account") or {}).get("timezone_name")
+            if not name:
+                raise ValidationError(
+                    f"Could not read the time zone of pixel {pixel_id}; "
+                    "pass timezone='Area/City' explicitly")
+            self._pixel_timezones[pixel_id] = name
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError) as e:
+            raise ValidationError(f"Unknown time zone {name!r}; use an IANA name such as 'America/Sao_Paulo'") from e
+
+    @staticmethod
+    def _local_midnight(day: date, tz: ZoneInfo) -> str:
+        """Format local midnight of `day` as `YYYY-MM-DDT00:00:00-0300`-style text."""
+        return datetime.combine(day, dtime.min, tzinfo=tz).strftime("%Y-%m-%dT%H:%M:%S%z")
 
     def _raise_for_error_response(self, response: requests.Response, report_name: str) -> NoReturn:
         """

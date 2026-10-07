@@ -163,12 +163,20 @@ rows = client.get_pixel_event_hosts("2082629071758453", "2026-09-07", "2026-10-0
 #  'host': 'www.tripleducati.com.br', 'count': 3}
 ```
 
-Requirements and caveats:
+Requirements and caveats (runnable version: [examples/pixel_stats.py](examples/pixel_stats.py)):
 
 - The token's user needs access to the pixel **and** `ads_management`; `ads_read` alone is
   rejected with `(#100) Permission Denied`.
-- Buckets are hourly in the pixel owner's time zone. `date` and `hour` come from the
-  `start_time` string as given, with no conversion.
+- Failures are handled like `get_report()`: rate limits and transient errors are retried with
+  backoff, token errors raise `AuthenticationError`, permission errors raise `APIError`.
+- `get_pixel_event_hosts()` costs `1 + number_of_events` requests; pass `events=[...]` to skip
+  discovery and `sleep_seconds` to space them out.
+- Dates are calendar days in the pixel owner's time zone, read from its owner ad account
+  (pass `timezone="America/Sao_Paulo"` to override or when the pixel has no owner account).
+  This is the same rule Insights follows with the ad account's time zone. The raw edge reads
+  date-only values as UTC, so the client sends local midnight with its offset.
+- Buckets are hourly. `date` and `hour` come from the `start_time` string as given, so they
+  are local to that same time zone.
 - No campaign or ad dimension, and the counts already **include** ad-attributed events.
   Do not add them to Insights conversions.
 
@@ -195,6 +203,7 @@ custom_report = create_custom_report(
 Check the `examples/` directory for comprehensive usage examples:
 
 - `basic_usage.py` - Simple report extraction
+- `pixel_stats.py` - Pixel event counts by hour and by hostname, with a daily summary and CSV export
 
 
 ## Requirements

@@ -34,7 +34,9 @@ def bucket(start_time: str, aggregation: str, *items: tuple[str, int]) -> dict[s
 
 @pytest.fixture
 def client() -> MetaAdsReport:
-    return MetaAdsReport({"access_token": "test-token"})
+    c = MetaAdsReport({"access_token": "test-token"})
+    c._pixel_timezones[PIXEL] = "America/Sao_Paulo"  # skips the owner time zone lookup
+    return c
 
 
 def install(monkeypatch: pytest.MonkeyPatch, responses: list[FakeResponse]) -> list[dict[str, Any]]:
@@ -69,15 +71,15 @@ def test_flattens_buckets_and_reads_local_date_and_hour(
     assert rows[2]["hour"] == 1
 
 
-def test_end_date_is_inclusive_and_sent_as_exclusive_end_time(
+def test_end_date_is_inclusive_and_sent_as_exclusive_local_midnight(
         client: MetaAdsReport, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install(monkeypatch, [FakeResponse({"data": []})])
 
     client.get_pixel_stats(PIXEL, "2026-09-07", datetime(2026, 10, 4, 15, 30))
 
     params = calls[0]["params"]
-    assert params["start_time"] == "2026-09-07"
-    assert params["end_time"] == "2026-10-05"
+    assert params["start_time"] == "2026-09-07T00:00:00-0300"
+    assert params["end_time"] == "2026-10-05T00:00:00-0300"
     assert params["aggregation"] == "event"
     assert "event" not in params
     assert calls[0]["url"].endswith(f"/{PIXEL}/stats")
@@ -223,3 +225,75 @@ def test_event_hosts_with_explicit_events_skips_discovery_and_sleeps_between_cal
 
     assert [c["params"]["event"] for c in calls] == ["Lead", "testride_sucesso"]
     assert sleeps == [15]
+
+
+def test_rate_limit_is_retried_then_succeeds(
+        client: MetaAdsReport, monkeypatch: pytest.MonkeyPatch) -> None:
+    limited = {"error": {"message": "(#80004) Too many calls", "code": 80004}}
+    ok = {"data": [bucket("2026-10-01T00:00:00-0300", "event", ("PageView", 1))]}
+    calls = install(monkeypatch, [FakeResponse(limited, status_code=400), FakeResponse(ok)])
+    monkeypatch.setattr("facebook_ads_reports.retry.time.sleep", lambda _: None)
+
+    rows = client.get_pixel_stats(PIXEL, "2026-10-01", "2026-10-01")
+
+    assert len(calls) == 2
+    assert rows[0]["value"] == "PageView"
+
+
+def test_event_hosts_with_no_events_makes_a_single_discovery_request(
+        client: MetaAdsReport, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = install(monkeypatch, [FakeResponse({"data": []})])
+
+    assert client.get_pixel_event_hosts(PIXEL, "2026-10-01", "2026-10-01") == []
+    assert len(calls) == 1
+
+
+def test_window_is_local_midnight_with_explicit_timezone_and_dst(
+        client: MetaAdsReport, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = install(monkeypatch, [FakeResponse({"data": []}), FakeResponse({"data": []})])
+
+    client.get_pixel_stats(PIXEL, "2026-01-15", "2026-01-15", timezone="America/New_York")
+    client.get_pixel_stats(PIXEL, "2026-07-15", "2026-07-15", timezone="America/New_York")
+
+    assert calls[0]["params"]["start_time"] == "2026-01-15T00:00:00-0500"
+    assert calls[0]["params"]["end_time"] == "2026-01-16T00:00:00-0500"
+    assert calls[1]["params"]["start_time"] == "2026-07-15T00:00:00-0400"
+
+
+def test_timezone_is_read_from_owner_ad_account_once_and_cached() -> None:
+    fresh = MetaAdsReport({"access_token": "test-token"})
+    lookup = {"owner_ad_account": {"timezone_name": "America/Sao_Paulo", "id": "act_1"}}
+    empty = {"data": []}
+    mp = pytest.MonkeyPatch()
+    try:
+        calls = install(mp, [FakeResponse(lookup), FakeResponse(empty), FakeResponse(empty)])
+        fresh.get_pixel_stats(PIXEL, "2026-10-01", "2026-10-01")
+        fresh.get_pixel_stats(PIXEL, "2026-10-01", "2026-10-01")
+    finally:
+        mp.undo()
+
+    assert len(calls) == 3
+    assert calls[0]["url"].endswith(f"/{PIXEL}")
+    assert calls[0]["params"] == {"fields": "owner_ad_account{timezone_name}"}
+    assert calls[1]["params"]["start_time"] == "2026-10-01T00:00:00-0300"
+
+
+def test_unresolvable_timezone_asks_for_an_explicit_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    fresh = MetaAdsReport({"access_token": "test-token"})
+    install(monkeypatch, [FakeResponse({"id": PIXEL})])
+
+    with pytest.raises(ValidationError, match="timezone="):
+        fresh.get_pixel_stats(PIXEL, "2026-10-01", "2026-10-01")
+
+
+def test_unknown_timezone_name_is_a_validation_error(client: MetaAdsReport) -> None:
+    with pytest.raises(ValidationError):
+        client.get_pixel_stats(PIXEL, "2026-10-01", "2026-10-01", timezone="Mars/Olympus")
+
+
+def test_event_hosts_forwards_timezone(client: MetaAdsReport, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = install(monkeypatch, [FakeResponse({"data": []})])
+
+    client.get_pixel_event_hosts(PIXEL, "2026-10-01", "2026-10-01", events=["Lead"], timezone="America/Noronha")
+
+    assert calls[0]["params"]["start_time"] == "2026-10-01T00:00:00-0200"

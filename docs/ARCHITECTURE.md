@@ -31,8 +31,15 @@ and reuses `_raise_for_error_response()` and `@retry_on_api_error`.
 
 Behavior observed against the live API (v25.0):
 
-- `end_time` is exclusive; date-only values are read in the pixel owner's time zone. The
-  method adds one day so callers pass an inclusive `end_date`.
+- `end_time` is exclusive, and a date-only `start_time` / `end_time` is read as **UTC
+  midnight**, not in the pixel owner's time zone. For a `-0300` pixel, `start_time=2026-09-30`
+  returned a first bucket at `2026-09-29T21:00:00-0300` and left out the last three local hours
+  of the final day. An ISO value with an offset (`2026-09-30T00:00:00-0300`) is honored.
+  The method therefore sends local midnight with its offset, and adds one day to `end_date`
+  so callers pass an inclusive end.
+- The time zone is the pixel's `owner_ad_account.timezone_name`, read with one extra request
+  per pixel and cached on the instance. `timezone="Area/City"` overrides it, and is required
+  when the pixel exposes no owner ad account.
 - Buckets are hourly and empty hours are absent. `start_time` carries the UTC offset.
 - `paging.next` is present even on a complete first page; the following page is empty.
   The loop stops on an empty page rather than on a missing `next`.
@@ -40,6 +47,22 @@ Behavior observed against the live API (v25.0):
   event with the `event` filter, which is what `get_pixel_event_hosts()` does.
 - `Permission Denied` / `Missing Permission` mean the token's user lacks the pixel or
   `ads_management`. Both are `APIError` (error code 100) and are not retried.
+
+### Time zones
+
+Every date window in the package means the same thing: calendar days in the time zone of the
+asset being read, with no offset applied by this code.
+
+- **Insights (`get_report()`)** sends `time_range` as plain `YYYY-MM-DD` strings
+  (`client.py`, `since` / `until`). No conversion or offset exists anywhere in the request path;
+  per Meta's documentation the API reads those days in the ad account's time zone.
+- **Pixel stats** need the offset because that edge reads date-only values as UTC, so the
+  client builds the local-midnight boundaries itself (see above).
+
+Row timestamps are therefore comparable across both sources only when the ad account and the
+pixel owner share a time zone, which holds for every account checked while building this
+(`America/Sao_Paulo`). Accounts can differ (`America/Noronha` exists), so check
+`timezone_name` on the ad account before joining the two.
 
 ## Token Verification
 

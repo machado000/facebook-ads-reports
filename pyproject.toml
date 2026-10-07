@@ -1,6 +1,6 @@
 [project]
 name = "facebook-ads-reports"
-version = "2.5.0"
+version = "2.6.0"
 description = "ETL module for Facebook Ads API v25 with lightweight native Python data processing"
 authors = [{ name = "Joao Brito"}]
 readme = "README.md"
@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "python-dotenv (>=1.1.1,<2.0.0)",
     "requests (>=2.32.4,<3.0.0)",
+    "tzdata; sys_platform == 'win32'",
 ]
 
 [dependency-groups]
