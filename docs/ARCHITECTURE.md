@@ -265,8 +265,8 @@ uv build
 ```
 
 `mypy` is configured strictly in `pyproject.toml` and is the main quality gate. The test
-suite is small (pixel stats only). The CI `test` job runs it on Python 3.11 to 3.14 and still
-accepts pytest exit code 5, so it would not fail if the tests disappeared.
+suite is small (pixel stats only). The CI `test` job runs it on Python 3.11 to 3.14 with a plain
+`uv run pytest`, so an empty or missing suite (pytest exit code 5) fails the job.
 
 ## CI/CD Reality
 
