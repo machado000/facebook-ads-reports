@@ -21,6 +21,26 @@ There is no persistence layer. Every extraction returns `list[dict[str, Any]]`; 
 into a warehouse is the caller's job. `table_name` / `constraint_column` / `date_column`
 in the models are metadata *for* that caller — the package never reads them.
 
+## Pixel Stats
+
+`get_pixel_stats()` bypasses the report-model machinery on purpose. Models assume
+`act_<id>/<endpoint>`, a `time_range` parameter and a flat response; the pixel edge is
+parented by a pixel ID, takes `start_time` / `end_time` and nests its payload as
+`data[{start_time, aggregation, data[{value, count}]}]`. A dedicated method returns flat rows
+and reuses `_raise_for_error_response()` and `@retry_on_api_error`.
+
+Behavior observed against the live API (v25.0):
+
+- `end_time` is exclusive; date-only values are read in the pixel owner's time zone. The
+  method adds one day so callers pass an inclusive `end_date`.
+- Buckets are hourly and empty hours are absent. `start_time` carries the UTC offset.
+- `paging.next` is present even on a complete first page; the following page is empty.
+  The loop stops on an empty page rather than on a missing `next`.
+- `event` and `host` are separate aggregations. Crossing them takes one `host` request per
+  event with the `event` filter, which is what `get_pixel_event_hosts()` does.
+- `Permission Denied` / `Missing Permission` mean the token's user lacks the pixel or
+  `ads_management`. Both are `APIError` (error code 100) and are not retried.
+
 ## Token Verification
 
 `MetaAdsReport.verify_token(required_scopes=None)` inspects the configured token via
@@ -216,14 +236,14 @@ These are current behaviors, verified against the source and the sample extracts
 
 ```bash
 uv sync --all-groups
-uv run pytest                      # no tests/ directory exists yet
+uv run pytest                      # tests/ covers the pixel stats methods
 uv run mypy facebook_ads_reports   # strict: disallow_untyped_defs, warn_return_any
 uv build
 ```
 
-`mypy` is configured strictly in `pyproject.toml` and is the effective quality gate —
-there is currently no test suite, and CI treats pytest exit code 5 (no tests collected)
-as success.
+`mypy` is configured strictly in `pyproject.toml` and is the main quality gate. The test
+suite is small (pixel stats only). The CI `test` job runs it on Python 3.11 to 3.14 and still
+accepts pytest exit code 5, so it would not fail if the tests disappeared.
 
 ## CI/CD Reality
 

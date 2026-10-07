@@ -70,6 +70,29 @@ def load_credentials(config_path: Optional[str] = None) -> Dict[str, Any]:
     )
 
 
+def validate_pixel_id(pixel_id: str) -> str:
+    """
+    Validate a Meta pixel (dataset) ID: a bare string of 8 to 20 digits.
+
+    Args:
+        pixel_id (str): The pixel ID to validate
+
+    Returns:
+        str: The stripped pixel ID
+
+    Raises:
+        ValidationError: If the pixel ID is not a digit string of plausible length
+    """
+    if not pixel_id or not isinstance(pixel_id, str):
+        raise ValidationError("Pixel ID must be a non-empty string")
+
+    clean_id = pixel_id.strip()
+    if not clean_id.isdigit() or not 8 <= len(clean_id) <= 20:
+        raise ValidationError(f"Pixel ID must be 8 to 20 digits: {pixel_id}")
+
+    return clean_id
+
+
 def validate_account_id(account_id: str) -> str:
     """
     Validate and format a Facebook Ads Account ID as 'act_' plus digits.

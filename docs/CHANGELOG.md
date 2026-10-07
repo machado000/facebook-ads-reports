@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `MetaAdsReport.get_pixel_stats()` reads the pixel's `/{pixel_id}/stats` edge: every event the pixel received, whether or not it was credited to an ad. Insights only returns ad-attributed conversions, so this is the only Graph API source for organic and direct events (form completions, WhatsApp clicks, test-ride requests). Returns flat hourly rows (`pixel_id`, `start_time`, `date`, `hour`, `aggregation`, `value`, `count`). `end_date` is inclusive; the API's exclusive `end_time` is handled internally. Follows `paging.next` and stops on the empty final page. Verified aggregations: `event`, `host`, `url`, `event_total_counts`
+- `MetaAdsReport.get_pixel_event_hosts()` crosses events with hostnames. The API cannot group by both at once, so it makes one `host` request per event using the `event` filter (`1 + number_of_events` requests, `sleep_seconds` between them)
+- `validate_pixel_id()` in `utils.py`, re-exported from the package root
+- First test suite (`tests/test_pixel_stats.py`), with `requests.get` mocked
+
+### Notes
+- Needs a token whose user has access to the pixel and carries `ads_management`. `ads_read` alone fails with `(#100) Permission Denied`, even for a pixel the Business Manager owns. A pixel owned by another Business Manager must be assigned or shared to the token's user first
+- Buckets are hourly with the pixel owner's UTC offset (for example `-0300`); `date` and `hour` are read from that string without conversion
+- Pixel stats carry no campaign, ad set or ad dimension, and **include** the events Insights attributes to ads. Add them to Insights counts and the same conversion is counted twice
+
 ## [2.5.0] - 2026-09-17
 
 ### Added

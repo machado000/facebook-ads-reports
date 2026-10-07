@@ -10,14 +10,15 @@ import json
 import logging
 import requests
 import socket
+import time
 import unicodedata
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from requests.exceptions import RequestException
 from typing import Any, Dict, Literal, NoReturn
 from .exceptions import APIError, AuthenticationError, DataProcessingError, ValidationError
 from .retry import retry_on_api_error
-from .utils import validate_account_id, convert_keys_case, sanitize_column_name
+from .utils import validate_account_id, validate_pixel_id, convert_keys_case, sanitize_column_name
 
 # Set timeout for all http connections
 TIMEOUT_IN_SEC = 60 * 3  # seconds timeout limit
@@ -67,6 +68,20 @@ def _parse_retry_after(header_value: str | None) -> float | None:
         return float(header_value)
     except ValueError:
         return None
+
+
+def _to_date(value: date | datetime | str, name: str) -> date:
+    """Coerce a date, datetime or ISO 'YYYY-MM-DD' string to a date."""
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value.strip()[:10])
+        except ValueError:
+            pass
+    raise ValidationError(f"{name} must be a date or an ISO 'YYYY-MM-DD' string, got {value!r}")
 
 
 class MetaAdsReport:
@@ -349,6 +364,155 @@ class MetaAdsReport:
 
         logging.info(f"Finished fetching full report with {len(cleaned_response)} rows")
         return cleaned_response
+
+    @retry_on_api_error()
+    def get_pixel_stats(self, pixel_id: str, start_date: date | datetime | str,
+                        end_date: date | datetime | str, aggregation: str = "event",
+                        event: str | None = None) -> list[dict[str, Any]]:
+        """
+        Retrieve raw event counts for a pixel (dataset) from the `/{pixel_id}/stats` edge.
+
+        This is the only Graph API source for events that were **not** attributed to an ad:
+        Insights only returns conversions credited to an ad, while the pixel counts every
+        event it received, from paid, organic and direct traffic alike. The edge returns no
+        campaign, ad set or ad dimension.
+
+        Args:
+            pixel_id (str): Pixel / dataset ID (digits only, no `act_` prefix).
+            start_date (date | datetime | str): First day to include.
+            end_date (date | datetime | str): Last day to include (inclusive). The API's own
+                `end_time` is exclusive, so one day is added before the request.
+            aggregation (str): How the API groups the counts. `event` (value = event name),
+                `host` (value = site hostname), `url` (value = full page URL) and
+                `event_total_counts` were verified. `host` and `url` carry no event name
+                unless `event` is also given; see `get_pixel_event_hosts()`.
+            event (str | None): Restrict the counts to one event name. Works with `host`
+                and `url`, which is how counts are crossed by event.
+
+        Returns:
+            list[dict[str, Any]]: One row per (hour bucket, value) with keys `pixel_id`,
+                `start_time`, `date`, `hour`, `aggregation`, `value`, `count` and, when
+                `event` was given, `event`. Buckets are hourly and empty hours are omitted.
+                `start_time` is the API's own string, which carries the UTC offset of the
+                pixel owner's time zone (for example `2026-10-01T00:00:00-0300`); `date`
+                and `hour` are read from it without conversion, so they are local time.
+
+        Raises:
+            ValidationError: For a malformed pixel ID, bad dates or an empty aggregation.
+            AuthenticationError: For token failures (never retried).
+            APIError: For every other failed response. Permission failures on this edge
+                arrive as `(#100) Permission Denied` or `Missing Permission` and mean the
+                token's user lacks access to the pixel, or `ads_management` is missing.
+        """
+        pixel_id = validate_pixel_id(pixel_id)
+        start = _to_date(start_date, "start_date")
+        end = _to_date(end_date, "end_date")
+        if end < start:
+            raise ValidationError(f"end_date {end} is before start_date {start}")
+        if not aggregation or not isinstance(aggregation, str):
+            raise ValidationError("aggregation must be a non-empty string")
+
+        params: dict[str, Any] = {
+            "aggregation": aggregation,
+            "start_time": start.isoformat(),
+            "end_time": (end + timedelta(days=1)).isoformat(),
+        }
+        if event:
+            params["event"] = event
+
+        report_name = "pixel_stats"
+        print(f"INFO - Trying to get Meta pixel stats with `{self.api_base_url}`\n",
+              "[ Request parameters ]",
+              f"Pixel_id: {pixel_id}",
+              f"Aggregation: {aggregation}" + (f" | Event: {event}" if event else ""),
+              f"Date range: from {start} to {end}\n",
+              sep="\n")
+
+        headers = {'Authorization': f'Bearer {self.access_token}'}
+        url: str | None = f"{self.api_base_url}/{pixel_id}/stats"
+        query: dict[str, Any] | None = params
+
+        rows: list[dict[str, Any]] = []
+        page_count = 0
+
+        while url:
+            response = requests.get(url, headers=headers, params=query)
+            if response.status_code != 200:
+                self._raise_for_error_response(response, report_name)
+
+            payload = response.json()
+            for bucket in payload.get("data", []):
+                start_time = bucket.get("start_time")
+                if not isinstance(start_time, str) or len(start_time) < 13:
+                    continue
+                for item in bucket.get("data", []):
+                    row: dict[str, Any] = {
+                        "pixel_id": pixel_id,
+                        "start_time": start_time,
+                        "date": start_time[:10],
+                        "hour": int(start_time[11:13]),
+                        "aggregation": bucket.get("aggregation", aggregation),
+                        "value": item.get("value"),
+                        "count": int(item.get("count", 0)),
+                    }
+                    if event:
+                        row["event"] = event
+                    rows.append(row)
+
+            page_count += 1
+            # `paging.next` carries its own query string, so params are sent only once.
+            # The final page is empty, and an empty page is what ends the loop when
+            # `next` is still present.
+            url = payload.get("paging", {}).get("next") if payload.get("data") else None
+            query = None
+
+        logging.info(f"Finished fetching pixel stats with {len(rows)} rows in {page_count} page(s)")
+        return rows
+
+    def get_pixel_event_hosts(self, pixel_id: str, start_date: date | datetime | str,
+                              end_date: date | datetime | str, events: list[str] | None = None,
+                              sleep_seconds: float = 0.0) -> list[dict[str, Any]]:
+        """
+        Count pixel events by hostname, crossing the `event` and `host` aggregations.
+
+        The API cannot group by both at once, so this lists the event names in the window
+        (unless `events` is given) and then makes one `host` request per event with the
+        `event` filter. The cost is therefore `1 + number_of_events` requests.
+
+        Args:
+            pixel_id (str): Pixel / dataset ID.
+            start_date (date | datetime | str): First day to include.
+            end_date (date | datetime | str): Last day to include (inclusive).
+            events (list[str] | None): Event names to query. None discovers every event
+                the pixel received in the window.
+            sleep_seconds (float): Pause between requests, to respect rate limits.
+
+        Returns:
+            list[dict[str, Any]]: One row per (hour bucket, event, host) with keys
+                `pixel_id`, `start_time`, `date`, `hour`, `event`, `host`, `count`.
+                Same time zone semantics as `get_pixel_stats()`.
+        """
+        if events is None:
+            event_rows = self.get_pixel_stats(pixel_id, start_date, end_date, aggregation="event")
+            events = sorted({str(r["value"]) for r in event_rows if r["value"]})
+
+        rows: list[dict[str, Any]] = []
+        for index, event_name in enumerate(events):
+            if index and sleep_seconds:
+                time.sleep(sleep_seconds)
+            for r in self.get_pixel_stats(pixel_id, start_date, end_date,
+                                          aggregation="host", event=event_name):
+                rows.append({
+                    "pixel_id": r["pixel_id"],
+                    "start_time": r["start_time"],
+                    "date": r["date"],
+                    "hour": r["hour"],
+                    "event": event_name,
+                    "host": r["value"],
+                    "count": r["count"],
+                })
+
+        return rows
 
     def _raise_for_error_response(self, response: requests.Response, report_name: str) -> NoReturn:
         """
