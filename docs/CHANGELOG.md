@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [2.6.0] - 2026-10-07
+
+### Added
+- `MetaAdsReport.get_pixel_stats()` reads the pixel's `/{pixel_id}/stats` edge: every event the pixel received, whether or not it was credited to an ad. Insights only returns ad-attributed conversions, so this is the only Graph API source for organic and direct events (form completions, WhatsApp clicks, test-ride requests). Returns flat hourly rows (`pixel_id`, `start_time`, `date`, `hour`, `aggregation`, `value`, `count`). `end_date` is inclusive; the API's exclusive `end_time` is handled internally. Follows `paging.next` and stops on the empty final page. Verified aggregations: `event`, `host`, `url`, `event_total_counts`
+- `MetaAdsReport.get_pixel_event_hosts()` crosses events with hostnames. The API cannot group by both at once, so it makes one `host` request per event using the `event` filter (`1 + number_of_events` requests, `sleep_seconds` between them)
+- `zoneinfo` is now used; `tzdata` is declared as a dependency on Windows only, where the standard library has no time zone database
+- `validate_pixel_id()` in `utils.py`, re-exported from the package root
+- First test suite (`tests/test_pixel_stats.py`), with `requests.get` mocked
+- `examples/pixel_stats.py`: hourly event counts, event-by-host crossing, daily summary and CSV export
+
+### Compatibility
+- Purely additive: no existing method, model, signature or export changes. The eight report models return identical output before and after, and `__all__` only gains `validate_pixel_id`. Code written against 2.4 or 2.5 runs unchanged
+
+### Notes
+- Needs a token whose user has access to the pixel and carries `ads_management`. `ads_read` alone fails with `(#100) Permission Denied`, even for a pixel the Business Manager owns. A pixel owned by another Business Manager must be assigned or shared to the token's user first
+- The `stats` edge reads a date-only `start_time` / `end_time` as UTC, which shifts the window by the pixel's offset (3 hours for `-0300`: it included the last three hours of the day before and dropped the last three of the final day). `get_pixel_stats()` and `get_pixel_event_hosts()` now send local midnight with its UTC offset, so `start_date` / `end_date` are calendar days in the pixel owner's time zone, the same convention Insights uses with the ad account's. The time zone is read once per pixel from `owner_ad_account.timezone_name` (one extra request, cached on the instance); the new `timezone` argument overrides it and is required when the pixel has no owner ad account
+- Buckets are hourly with the window's UTC offset (for example `-0300`); `date` and `hour` are read from that string without conversion
+- No time zone offset exists anywhere in the Insights path: `get_report()` sends plain dates, unchanged
+- Pixel stats carry no campaign, ad set or ad dimension, and **include** the events Insights attributes to ads. Add them to Insights counts and the same conversion is counted twice
+
 ## [2.5.0] - 2026-09-17
 
 ### Added

@@ -20,6 +20,7 @@ from .models import MetaAdsReportModel, create_custom_report
 from .utils import (
     load_credentials,
     validate_account_id,
+    validate_pixel_id,
     create_output_directory,
     format_report_filename,
     get_month_date_pairs,
@@ -47,6 +48,7 @@ __all__ = [
     # Utils
     "load_credentials",
     "validate_account_id",
+    "validate_pixel_id",
     "create_output_directory",
     "format_report_filename",
     "get_month_date_pairs",

@@ -18,6 +18,7 @@ A Python ETL driver for Facebook Marketing API v25 data extraction and transform
 - **Lightweight Architecture**: No pandas dependency for faster installations and smaller footprint
 - **Type Hints**: Full type hint support with strict mypy compliance for better IDE experience
 - **Data Processing Utilities**: Helper functions for data transformation and export
+- **Pixel Stats**: `get_pixel_stats()` / `get_pixel_event_hosts()` read the pixel's own event counts, including events Insights never attributes to an ad
 - **Token Verification**: `verify_token()` reports validity, type, expiry, and scopes via `/debug_token`
 - **Unicode-Safe Text Cleaning**: Response cleanup preserves accents and Unicode while removing null bytes and unsafe control characters
 - **Warehouse-Safe Column Names**: Flattened action columns are sanitized to valid identifiers, so `offsite_conversion.fb_pixel_purchase` lands as `offsite_conversion_fb_pixel_purchase`
@@ -140,6 +141,45 @@ You can also list models dynamically with `MetaAdsReportModel.list_available_rep
 
 Full field lists, flattening behavior, and output schemas: [docs/REPORT_FIELDS.md](docs/REPORT_FIELDS.md).
 
+## Pixel Stats
+
+Insights returns only the conversions Meta credited to an ad. To count everything a pixel
+received (organic, direct and paid alike) read the pixel's `stats` edge:
+
+```python
+from facebook_ads_reports import MetaAdsReport
+
+client = MetaAdsReport(credentials)
+
+# Event totals per hour. end_date is inclusive.
+rows = client.get_pixel_stats("2082629071758453", "2026-09-07", "2026-10-04", aggregation="event")
+# {'pixel_id': ..., 'start_time': '2026-10-01T00:00:00-0300', 'date': '2026-10-01',
+#  'hour': 0, 'aggregation': 'event', 'value': 'testride_sucesso', 'count': 3}
+
+# Events crossed with hostname (one request per event).
+rows = client.get_pixel_event_hosts("2082629071758453", "2026-09-07", "2026-10-04",
+                                    events=["testride_sucesso"], sleep_seconds=15)
+# {'pixel_id': ..., 'date': '2026-10-01', 'hour': 0, 'event': 'testride_sucesso',
+#  'host': 'www.tripleducati.com.br', 'count': 3}
+```
+
+Requirements and caveats (runnable version: [examples/pixel_stats.py](examples/pixel_stats.py)):
+
+- The token's user needs access to the pixel **and** `ads_management`; `ads_read` alone is
+  rejected with `(#100) Permission Denied`.
+- Failures are handled like `get_report()`: rate limits and transient errors are retried with
+  backoff, token errors raise `AuthenticationError`, permission errors raise `APIError`.
+- `get_pixel_event_hosts()` costs `1 + number_of_events` requests; pass `events=[...]` to skip
+  discovery and `sleep_seconds` to space them out.
+- Dates are calendar days in the pixel owner's time zone, read from its owner ad account
+  (pass `timezone="America/Sao_Paulo"` to override or when the pixel has no owner account).
+  This is the same rule Insights follows with the ad account's time zone. The raw edge reads
+  date-only values as UTC, so the client sends local midnight with its offset.
+- Buckets are hourly. `date` and `hour` come from the `start_time` string as given, so they
+  are local to that same time zone.
+- No campaign or ad dimension, and the counts already **include** ad-attributed events.
+  Do not add them to Insights conversions.
+
 ## Custom Reports
 
 Create custom model metadata templates:
@@ -163,6 +203,7 @@ custom_report = create_custom_report(
 Check the `examples/` directory for comprehensive usage examples:
 
 - `basic_usage.py` - Simple report extraction
+- `pixel_stats.py` - Pixel event counts by hour and by hostname, with a daily summary and CSV export
 
 
 ## Requirements
@@ -185,8 +226,7 @@ uv run mypy facebook_ads_reports
 uv build
 ```
 
-Note: there is no `tests/` directory yet, so `pytest` collects nothing (exit code 5).
-`mypy` is the effective quality gate.
+`tests/` currently covers the pixel stats methods; `mypy` remains the main quality gate.
 
 Publishing is automated through `.github/workflows/release.yml`, which runs on every push
 to `main`: a Python 3.11-3.14 test matrix, then a build-and-publish job that skips PyPI if
