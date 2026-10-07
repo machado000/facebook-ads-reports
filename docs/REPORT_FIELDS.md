@@ -207,12 +207,24 @@ Coverage is sparse by nature — in a live 664-row day, `actions` appeared on 37
 `action_values` on 207, and `purchase_roas` on 17. Rows without a conversion simply omit
 those keys, so **absent is not zero**.
 
-**`conversion_values` is account-dependent.** The API accepts the field and returns no
-error, but it only populates for accounts with custom conversions configured; on an account
-using standard pixel events it yields nothing (0 of 664 rows in the live test — those
-conversions surface through `actions` / `action_values` instead). It is kept in the model
-because it costs nothing when empty and populates automatically for accounts that do use
-custom conversions.
+**`conversions` / `conversion_values` report on custom conversions only.** They cover
+conversion events defined in Events Manager as *custom conversions* — not standard pixel
+events. On an account with none defined, the API accepts the field, returns no error, and
+omits the key from every row.
+
+Confirmed on `act_701445397317988`: `/act_.../customconversions` returns `count=0`, and
+`conversion_values` is absent under every parameter combination tested — with and without
+`breakdowns`, with and without `action_breakdowns`, at ad level and account level. It is
+not a breakdown incompatibility.
+
+That account's revenue arrives through `action_values` instead (`purchase = 41655.46` on
+2026-08-08). The fields stay in the model because they cost nothing when empty and populate
+automatically for accounts that do define custom conversions.
+
+Consequence for exports: `save_report_to_csv()` builds its header from the union of keys
+across all rows, so a field the API never returns produces **no column at all** rather than
+an empty one. This is why a `flatten=False` extract shows `actions`, `action_values`,
+`purchase_roas`, and the five `video_*_actions` columns but no `conversion_values`.
 
 `conversions` (counts, prefix `conversion_`) is handled by the flattener but not requested
 by the model — add the field name to `fields` if you need it.
